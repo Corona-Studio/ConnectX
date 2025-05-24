@@ -458,7 +458,7 @@ public class GroupManager
 
         var metadata = new Dictionary<string, string>(1)
         {
-            {GroupOpResult.UseRelayServerKey, (assignedRelayServerAddress == null).ToString()}
+            {GroupOpResult.UseRelayServerKey, (assignedRelayServerAddress != null).ToString()}
         };
 
         var success = new GroupOpResult(
@@ -577,6 +577,12 @@ public class GroupManager
                 assignedRelayServerAddress = TryAssignRelayServerAddress(userId, ctx);
                 group.AssignedRelayServer = assignedRelayServerAddress;
             }
+
+            _logger.LogAssignedRelayServerAddressToGroupMember(
+                group.RoomId,
+                user.UserId,
+                user.DisplayName,
+                assignedRelayServerAddress);
         }
 
         var info = new UserSessionInfo(user, assignedRelayServerAddress);
@@ -586,7 +592,7 @@ public class GroupManager
 
         var metadata = new Dictionary<string, string>(1)
         {
-            {GroupOpResult.UseRelayServerKey, (assignedRelayServerAddress == null).ToString()}
+            {GroupOpResult.UseRelayServerKey, (assignedRelayServerAddress != null).ToString()}
         };
 
         var success = new GroupOpResult(
@@ -944,4 +950,12 @@ internal static partial class GroupManagerLoggers
 
     [LoggerMessage(LogLevel.Information, "[GROUP_MANAGER] Redirect message sent to client! [{redirectMsg}]")]
     public static partial void LogRedirectMessageSent(this ILogger logger, InterconnectServerRegistration redirectMsg);
+
+    [LoggerMessage(LogLevel.Information, "[GROUP_MANAGER] Relay server assigned for group ({groupId}) member [{userId}]({userName}) {address}")]
+    public static partial void LogAssignedRelayServerAddressToGroupMember(
+        this ILogger logger,
+        Guid groupId,
+        Guid userId,
+        string userName,
+        IPEndPoint? address);
 }

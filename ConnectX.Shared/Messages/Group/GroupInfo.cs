@@ -18,7 +18,8 @@ public partial record GroupInfo
         CurrentUserCount = 0,
         MaxUserCount = 0,
         Users = [],
-        RoomNetworkId = 0
+        RoomNetworkId = 0,
+        UseRelayServer = false
     };
 
     public required Guid RoomId { get; init; }
@@ -31,4 +32,5 @@ public partial record GroupInfo
     public required int CurrentUserCount { get; init; }
     public required int MaxUserCount { get; init; }
     public required UserInfo[] Users { get; init; }
+    public required bool UseRelayServer { get; init; }
 }

@@ -54,7 +54,8 @@ public class RoomInfoManager(
                 continue;
             }
 
-            if (OperatingSystem.IsWindows())
+            if (OperatingSystem.IsWindows() &&
+                !CurrentGroupInfo.UseRelayServer)
             {
                 await TaskHelper.WaitUntilAsync(zeroTierNodeLinkHolder.IsNodeOnline, stoppingToken);
                 await TaskHelper.WaitUntilAsync(zeroTierNodeLinkHolder.IsNetworkReady, stoppingToken);
@@ -80,7 +81,8 @@ public class RoomInfoManager(
             if ((self.NetworkIpAddresses == null ||
                 self.NetworkIpAddresses.Length == 0 ||
                 string.IsNullOrEmpty(self.NetworkNodeId)) &&
-                OperatingSystem.IsWindows())
+                OperatingSystem.IsWindows() &&
+                !CurrentGroupInfo.UseRelayServer)
             {
                 needToRefreshRoomInfo = true;
 

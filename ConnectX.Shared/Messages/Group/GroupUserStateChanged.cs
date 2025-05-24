@@ -8,6 +8,6 @@ namespace ConnectX.Shared.Messages.Group;
 [MemoryPackable]
 public partial class GroupUserStateChanged(GroupUserStates state, UserInfo? userInfo)
 {
-    public GroupUserStates State { get; init; } = state;
-    public UserInfo? UserInfo { get; init; } = userInfo;
+    public GroupUserStates State { get; } = state;
+    public UserInfo? UserInfo { get; } = userInfo;
 }

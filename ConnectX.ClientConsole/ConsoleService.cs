@@ -102,8 +102,7 @@ public class ConsoleService(
         {
             Commands.Room.Join.RoomIdOption,
             Commands.Room.Join.RoomShortIdOption,
-            Commands.Room.PasswordOption,
-            Commands.Room.UseRelayServerOption
+            Commands.Room.PasswordOption
         };
 
         joinCommand.SetHandler(HandleRoomJoinAsync);
@@ -176,7 +175,7 @@ public class ConsoleService(
 
         var (groupInfo, status, metadata, error) = await client.JoinGroupAsync(message, CancellationToken.None);
 
-        logger.LogInformation("Room join result received, {@info}, {status:G}, {@metadata}, {error}", groupInfo, status, metadata, error);
+        logger.LogInformation("Room join result received, Info: {@info}, Status: {status:G}, Metadata: {@metadata}, Error: {error}", groupInfo, status, metadata, error);
 
         _lastGroupInfo = groupInfo;
     }
@@ -202,7 +201,7 @@ public class ConsoleService(
 
         var (groupInfo, status, metadata, error) = await client.CreateGroupAsync(message, CancellationToken.None);
 
-        logger.LogInformation("Room join result received, {@info}, {status:G}, {@metadata}, {error}", groupInfo, status, metadata, error);
+        logger.LogInformation("Room join result received, Info: {@info}, Status: {status:G}, Metadata: {@metadata}, Error: {error}", groupInfo, status, metadata, error);
 
         _lastGroupInfo = groupInfo;
     }
