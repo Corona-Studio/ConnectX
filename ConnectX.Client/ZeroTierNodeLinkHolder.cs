@@ -95,11 +95,11 @@ public class ZeroTierNodeLinkHolder(ILogger<ZeroTierNodeLinkHolder> logger) : Ba
     {
         if (Node == null) return false;
 
-        await TaskHelper.WaitUtil(() => Node.Online, cancellationToken);
+        await TaskHelper.WaitUtil(() => Node?.Online ?? false, cancellationToken);
 
         Node.Join(networkId);
 
-        await TaskHelper.WaitUtil(() => Node.Networks.Count != 0, cancellationToken);
+        await TaskHelper.WaitUtil(() => Node?.Networks.Count != 0, cancellationToken);
 
         logger.LogZeroTierConnected(
             Node!.IdString,
@@ -195,8 +195,10 @@ internal static partial class ZeroTierNodeLinkHolderLogger
     [LoggerMessage(LogLevel.Information, "[ZeroTier] Starting ZeroTier Node Link Holder")]
     public static partial void LogStartingZeroTierNodeLinkHolder(this ILogger logger);
 
-    [LoggerMessage(LogLevel.Information, "[ZeroTier] ZeroTier connected, ID [{id}] Version [{version}]. Ports: I[{port1}] II[{port2}] III[{port3}]")]
-    public static partial void LogZeroTierConnected(this ILogger logger, string id, string version, ushort port1, ushort port2, ushort port3);
+    [LoggerMessage(LogLevel.Information,
+        "[ZeroTier] ZeroTier connected, ID [{id}] Version [{version}]. Ports: I[{port1}] II[{port2}] III[{port3}]")]
+    public static partial void LogZeroTierConnected(this ILogger logger, string id, string version, ushort port1,
+        ushort port2, ushort port3);
 
     [LoggerMessage(LogLevel.Information, "[ZeroTier] Network joined")]
     public static partial void LogNetworkJoined(this ILogger logger);
