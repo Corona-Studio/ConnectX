@@ -2,19 +2,19 @@
 
 public static class TaskHelper
 {
-    public static void Forget(this Task t)
+    public static void Forget(this Task _)
     {
     }
 
-    public static void Forget<T>(this Task<T> t)
+    public static void Forget<T>(this Task<T> _)
     {
     }
 
-    public static void Forget(this ValueTask t)
+    public static void Forget(this ValueTask _)
     {
     }
 
-    public static void Forget<T>(this ValueTask<T> t)
+    public static void Forget<T>(this ValueTask<T> _)
     {
     }
 
