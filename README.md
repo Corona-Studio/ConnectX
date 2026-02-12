@@ -4,7 +4,7 @@
 
 ![CodeFactor Grade](https://img.shields.io/codefactor/grade/github/corona-studio/connectx?logo=codefactor&style=for-the-badge)
 ![GitHub](https://img.shields.io/github/license/corona-studio/connectx?logo=github&style=for-the-badge)
-![Maintenance](https://img.shields.io/maintenance/yes/2025?logo=diaspora&style=for-the-badge)
+![Maintenance](https://img.shields.io/maintenance/yes/2026?logo=diaspora&style=for-the-badge)
 ![GitHub commit activity](https://img.shields.io/github/commit-activity/m/Corona-Studio/connectx?style=for-the-badge)
 ![GitHub closed pull requests](https://img.shields.io/github/issues-pr-closed/corona-studio/connectx?logo=github&style=for-the-badge)
 ![GitHub repo size](https://img.shields.io/github/repo-size/corona-studio/connectx?logo=github&style=for-the-badge)
