@@ -12,7 +12,6 @@ namespace ConnectX.Client.Network.ZeroTier.Tcp;
 public sealed class ZtTcpSession : AbstractSession
 {
     private bool _closed;
-    private readonly bool _isAcceptedSocket;
 
     public ZtTcpSession(
         int sessionId,
@@ -21,7 +20,7 @@ public sealed class ZtTcpSession : AbstractSession
         ILogger<ZtTcpSession> logger)
         : base(sessionId, logger)
     {
-        _isAcceptedSocket = isAcceptedSocket;
+        IsConnected = isAcceptedSocket;
 
         Socket = socket;
     }
@@ -36,7 +35,7 @@ public sealed class ZtTcpSession : AbstractSession
 
     public override bool CanReceive => IsConnected;
 
-    public override bool IsConnected => (_isAcceptedSocket && !_closed) || Socket is { Connected: true };
+    public override bool IsConnected => (field && !_closed) || Socket is { Connected: true };
 
     public event EventHandler<SocketError>? OnSocketError;
 
