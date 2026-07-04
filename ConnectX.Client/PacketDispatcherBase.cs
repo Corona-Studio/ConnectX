@@ -1,7 +1,7 @@
-﻿using ConnectX.Client.Models;
+﻿using System.Reflection;
+using ConnectX.Client.Models;
 using Hive.Codec.Abstractions;
 using Microsoft.Extensions.Logging;
-using System.Reflection;
 
 namespace ConnectX.Client;
 

@@ -1,6 +1,6 @@
-﻿using Hive.Codec.Shared;
+﻿using System.Collections.ObjectModel;
+using Hive.Codec.Shared;
 using MemoryPack;
-using System.Collections.ObjectModel;
 
 namespace ConnectX.Shared.Messages.Group;
 

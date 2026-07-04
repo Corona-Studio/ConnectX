@@ -13,6 +13,7 @@ using Hive.Network.Abstractions.Session;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Socket = ZeroTier.Sockets.Socket;
 using TaskHelper = Hive.Common.Shared.Helpers.TaskHelper;
 
 namespace ConnectX.Client.Managers;
@@ -21,16 +22,16 @@ public class PeerManager : BackgroundService, IEnumerable<KeyValuePair<Guid, Pee
 {
     private readonly ConcurrentDictionary<Guid, bool> _allPeers = new();
     private readonly ConcurrentDictionary<Guid, int> _bargainsDic = [];
-    private readonly ConcurrentDictionary<Guid, ZeroTier.Sockets.Socket> _ztServerSockets = [];
     private readonly IClientSettingProvider _clientSettingProvider;
     private readonly ConcurrentDictionary<Guid, Peer> _connectedPeers = [];
-    private readonly IRoomInfoManager _roomInfoManager;
     private readonly IDispatcher _dispatcher;
     private readonly ConcurrentDictionary<Guid, P2PConInitiator> _initiator = [];
     private readonly ILogger _logger;
+    private readonly IRoomInfoManager _roomInfoManager;
     private readonly IServerLinkHolder _serverLinkHolder;
-    private readonly IZeroTierNodeLinkHolder _zeroTierNodeLinkHolder;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IZeroTierNodeLinkHolder _zeroTierNodeLinkHolder;
+    private readonly ConcurrentDictionary<Guid, Socket> _ztServerSockets = [];
 
     public PeerManager(
         IRoomInfoManager roomInfoManager,
@@ -364,7 +365,6 @@ public class PeerManager : BackgroundService, IEnumerable<KeyValuePair<Guid, Pee
         _bargainsDic.Clear();
 
         foreach (var (_, ztSocket) in _ztServerSockets)
-        {
             try
             {
                 ztSocket.Shutdown(SocketShutdown.Both);
@@ -374,11 +374,10 @@ public class PeerManager : BackgroundService, IEnumerable<KeyValuePair<Guid, Pee
             {
                 // ignored
             }
-        }
+
         _ztServerSockets.Clear();
 
         foreach (var (_, peer) in _connectedPeers)
-        {
             try
             {
                 peer.StopHeartBeat();
@@ -387,11 +386,10 @@ public class PeerManager : BackgroundService, IEnumerable<KeyValuePair<Guid, Pee
             {
                 // ignored
             }
-        }
+
         _connectedPeers.Clear();
 
         foreach (var (_, conInitiator) in _initiator)
-        {
             try
             {
                 conInitiator.Dispose();
@@ -400,7 +398,7 @@ public class PeerManager : BackgroundService, IEnumerable<KeyValuePair<Guid, Pee
             {
                 // ignored
             }
-        }
+
         _initiator.Clear();
 
         _logger.LogPeerCleared();
@@ -424,7 +422,8 @@ internal static partial class PeerManagerLoggers
     [LoggerMessage(LogLevel.Warning, "[Peer] Room info is null, might be an internal error!")]
     public static partial void LogRoomInfoEmpty(this ILogger logger);
 
-    [LoggerMessage(LogLevel.Warning, "[Peer] No matched user with address [{address}] not found, waiting for the next event...")]
+    [LoggerMessage(LogLevel.Warning,
+        "[Peer] No matched user with address [{address}] not found, waiting for the next event...")]
     public static partial void LogUserWithAddressNotFound(this ILogger logger, IPAddress address);
 
     [LoggerMessage(LogLevel.Information, "[Peer] Server didn't return any P2P interconnect info")]

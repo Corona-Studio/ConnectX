@@ -19,15 +19,16 @@ public class P2PConInitiator : IDisposable
     private readonly CancellationTokenSource _cancellationTokenSource;
     private readonly IPEndPoint _localEndPoint;
     private readonly ILogger<P2PConInitiator> _logger;
-    private readonly Guid _partnerId;
-    private readonly P2PConContext _selfContext;
-    private readonly IServiceProvider _serviceProvider;
-    private readonly InitializedDispatchableSession _serverLink;
+
+    // ReSharper disable once InconsistentNaming
+    private readonly HandlerId _p2pConReadyHandler;
 
     // ReSharper disable once InconsistentNaming
     private readonly HandlerId _p2pOpResultHandler;
-    // ReSharper disable once InconsistentNaming
-    private readonly HandlerId _p2pConReadyHandler;
+    private readonly Guid _partnerId;
+    private readonly P2PConContext _selfContext;
+    private readonly InitializedDispatchableSession _serverLink;
+    private readonly IServiceProvider _serviceProvider;
 
     private TaskCompletionSource<ISession?>? _completionSource;
 

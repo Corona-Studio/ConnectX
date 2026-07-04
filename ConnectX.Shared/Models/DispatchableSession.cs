@@ -1,5 +1,6 @@
 ﻿using ConnectX.Shared.Interfaces;
 using Hive.Both.General.Dispatchers;
+using Hive.Common.Shared.Helpers;
 using Hive.Network.Abstractions.Session;
 
 namespace ConnectX.Shared.Models;
@@ -16,7 +17,7 @@ public class DispatchableSession : IDispatchableSession
 
         Session.BindTo(Dispatcher);
 
-        Hive.Common.Shared.Helpers.TaskHelper.FireAndForget(() => Session.StartAsync(cancellationToken));
+        TaskHelper.FireAndForget(() => Session.StartAsync(cancellationToken));
     }
 
     public ISession Session { get; }

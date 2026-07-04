@@ -1,6 +1,6 @@
 ﻿using System.Net;
-using System.Text.Json.Serialization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace ConnectX.Shared.JsonConverters;
 
@@ -15,7 +15,7 @@ public class IPEndPointJsonConverter : JsonConverter<IPEndPoint>
         // Try parse IP:Port format
         if (IPEndPoint.TryParse(endpointString, out var endpoint))
             return endpoint;
-        else throw new JsonException($"Invalid IPEndPoint format: {endpointString}");
+        throw new JsonException($"Invalid IPEndPoint format: {endpointString}");
     }
 
     public override void Write(Utf8JsonWriter writer, IPEndPoint value, JsonSerializerOptions options)

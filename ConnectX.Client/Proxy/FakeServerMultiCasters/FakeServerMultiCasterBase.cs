@@ -1,4 +1,9 @@
-﻿using ConnectX.Client.Interfaces;
+﻿using System.Collections.Frozen;
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
+using System.Text;
+using ConnectX.Client.Interfaces;
 using ConnectX.Client.Managers;
 using ConnectX.Client.Models;
 using ConnectX.Client.Route;
@@ -6,10 +11,6 @@ using ConnectX.Client.Transmission;
 using ConnectX.Client.Transmission.Connections;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using System.Collections.Frozen;
-using System.Net;
-using System.Net.Sockets;
-using System.Text;
 
 namespace ConnectX.Client.Proxy.FakeServerMultiCasters;
 
@@ -17,12 +18,18 @@ public abstract class FakeServerMultiCasterBase<TMultiCastPacket> : BackgroundSe
 {
     protected const string Prefix = "ConnectX";
 
+    private static readonly FrozenSet<string> VirtualKeywords = FrozenSet.Create(
+        "virtual", "vmware", "loopback",
+        "pseudo", "tunneling", "tap",
+        "container", "hyper-v", "bluetooth",
+        "docker");
+
     private readonly RouterPacketDispatcher _packetDispatcher;
     private readonly PartnerManager _partnerManager;
     private readonly IRoomInfoManager _roomInfoManager;
+    protected readonly ILogger Logger;
 
     protected readonly ProxyManager ProxyManager;
-    protected readonly ILogger Logger;
 
     protected FakeServerMultiCasterBase(
         PartnerManager partnerManager,
@@ -42,28 +49,22 @@ public abstract class FakeServerMultiCasterBase<TMultiCastPacket> : BackgroundSe
         _packetDispatcher.OnReceive<TMultiCastPacket>(OnReceiveMcMulticastMessage);
     }
 
-    public event Action<string, int>? OnListenedLanServer;
-
     protected abstract IPAddress MulticastAddress { get; }
     protected abstract int MulticastPort { get; }
     protected abstract IPEndPoint MulticastPacketReceiveAddress { get; }
 
     protected IPEndPoint MulticastIpe => new(MulticastAddress, MulticastPort);
 
-    private static readonly FrozenSet<string> VirtualKeywords = FrozenSet.Create(
-        "virtual", "vmware", "loopback",
-        "pseudo", "tunneling", "tap",
-        "container", "hyper-v", "bluetooth",
-        "docker");
+    public event Action<string, int>? OnListenedLanServer;
 
     protected static IPAddress GetLocalIpAddress()
     {
         var candidates = new List<IPAddress>();
 
-        var networkInterfaces = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+        var networkInterfaces = NetworkInterface.GetAllNetworkInterfaces()
             .Where(ni =>
-                ni.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up &&
-                ni.NetworkInterfaceType != System.Net.NetworkInformation.NetworkInterfaceType.Loopback &&
+                ni.OperationalStatus == OperationalStatus.Up &&
+                ni.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
                 !VirtualKeywords.Contains(ni.Description.ToLowerInvariant()) &&
                 !VirtualKeywords.Contains(ni.Name.ToLowerInvariant())
             );
@@ -72,7 +73,6 @@ public abstract class FakeServerMultiCasterBase<TMultiCastPacket> : BackgroundSe
         {
             var ipProps = ni.GetIPProperties();
             foreach (var address in ipProps.UnicastAddresses)
-            {
                 if (address.Address.AddressFamily == AddressFamily.InterNetwork)
                 {
                     var ip = address.Address;
@@ -81,7 +81,6 @@ public abstract class FakeServerMultiCasterBase<TMultiCastPacket> : BackgroundSe
 
                     candidates.Add(ip);
                 }
-            }
         }
 
         if (candidates.Count > 0)
@@ -92,19 +91,15 @@ public abstract class FakeServerMultiCasterBase<TMultiCastPacket> : BackgroundSe
 
     protected static int GetIpv6MulticastInterfaceIndex()
     {
-        var interfaces = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
-            .Where(ni => ni.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up);
+        var interfaces = NetworkInterface.GetAllNetworkInterfaces()
+            .Where(ni => ni.OperationalStatus == OperationalStatus.Up);
 
         foreach (var ni in interfaces)
         {
             var props = ni.GetIPProperties();
             foreach (var address in props.UnicastAddresses)
-            {
                 if (address.Address is { AddressFamily: AddressFamily.InterNetworkV6, IsIPv6LinkLocal: false })
-                {
                     return props.GetIPv6Properties().Index;
-                }
-            }
         }
 
         return 0;
@@ -206,7 +201,8 @@ internal static partial class FakeServerMultiCasterLoggers
 {
     [LoggerMessage(LogLevel.Information,
         "[MC_MULTI_CASTER] Received multicast message from {SenderId}, remote real port is {Port}, name is {Name}, is IPV6 [{isIpv6}]")]
-    public static partial void LogReceivedMulticastMessage(this ILogger logger, Guid senderId, ushort port, string name, bool isIpv6);
+    public static partial void LogReceivedMulticastMessage(this ILogger logger, Guid senderId, ushort port, string name,
+        bool isIpv6);
 
     [LoggerMessage(LogLevel.Error, "Proxy creation failed, sender ID: {SenderId}")]
     public static partial void LogProxyCreationFailed(this ILogger logger, Guid senderId);

@@ -1,13 +1,13 @@
-﻿using ConnectX.Client.Interfaces;
+﻿using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using ConnectX.Client.Interfaces;
 using ConnectX.Client.Managers;
 using ConnectX.Client.Messages.Proxy.MulticastMessages;
 using ConnectX.Client.Models;
 using ConnectX.Client.Route;
 using ConnectX.Client.Transmission;
 using Microsoft.Extensions.Logging;
-using System.Net;
-using System.Net.Sockets;
-using System.Text;
 
 namespace ConnectX.Client.Proxy.FakeServerMultiCasters;
 
@@ -18,7 +18,8 @@ public sealed class FakeServerMultiCasterV6(
     RelayPacketDispatcher relayPacketDispatcher,
     IRoomInfoManager roomInfoManager,
     ILogger<FakeServerMultiCasterV6> logger)
-    : FakeServerMultiCasterBase<McMulticastMessageV6>(partnerManager, channelManager, packetDispatcher, relayPacketDispatcher,
+    : FakeServerMultiCasterBase<McMulticastMessageV6>(partnerManager, channelManager, packetDispatcher,
+        relayPacketDispatcher,
         roomInfoManager, logger)
 {
     protected override IPAddress MulticastAddress => IPAddress.Parse("FF75:230::60");
@@ -55,7 +56,8 @@ public sealed class FakeServerMultiCasterV6(
 
             var localIp = GetLocalIpAddress();
 
-            socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface, localIp.GetAddressBytes());
+            socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface,
+                localIp.GetAddressBytes());
             socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 255);
             socket.Bind(new IPEndPoint(localIp, 0));
 
@@ -145,6 +147,7 @@ public sealed class FakeServerMultiCasterV6(
 
 internal static partial class FakeServerMultiCasterV6Loggers
 {
-    [LoggerMessage(LogLevel.Warning, "Looks like system does not support IPv6 multicast. Stopping IPV6 multi-caster...")]
+    [LoggerMessage(LogLevel.Warning,
+        "Looks like system does not support IPv6 multicast. Stopping IPV6 multi-caster...")]
     public static partial void LogMultiCasterDoesNotSupportIpv6(this ILogger logger);
 }

@@ -98,6 +98,7 @@ public sealed class ProxyManager : GenericProxyManager
 
             dispatcher.RemoveHandler(id);
         }
+
         _registeredHandlers.Clear();
 
         base.RemoveAllProxies();

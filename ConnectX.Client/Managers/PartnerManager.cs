@@ -17,9 +17,9 @@ public class PartnerManager
     private readonly IDispatcher _dispatcher;
     private readonly ILogger _logger;
     private readonly PeerManager _peerManager;
+    private readonly IRoomInfoManager _roomInfoManager;
     private readonly IServerLinkHolder _serverLinkHolder;
     private readonly IServiceProvider _serviceProvider;
-    private readonly IRoomInfoManager _roomInfoManager;
 
     private IPEndPoint? _assignedRelayServerAddress;
 
@@ -43,6 +43,8 @@ public class PartnerManager
         _dispatcher.AddHandler<GroupUserStateChanged>(OnGroupUserStateChanged);
         _dispatcher.AddHandler<RelayServerAddressAssignedMessage>(OnRelayServerAddressAssignedMessageReceived);
     }
+
+    public ConcurrentDictionary<Guid, Partner> Partners { get; } = new();
 
     private void OnRelayServerAddressAssignedMessageReceived(MessageContext<RelayServerAddressAssignedMessage> ctx)
     {
@@ -89,8 +91,6 @@ public class PartnerManager
             AddPartner(userId);
         }
     }
-
-    public ConcurrentDictionary<Guid, Partner> Partners { get; } = new();
 
     public event Action<Partner>? OnPartnerAdded;
     public event Action<Partner>? OnPartnerRemoved;
@@ -218,16 +218,19 @@ internal static partial class PartnerManagerLoggers
     [LoggerMessage(LogLevel.Warning, "[PARTNER_MANAGER] Partner disconnected with user ID [{partnerId}]")]
     public static partial void LogDisconnectedWithPartnerId(this ILogger logger, Guid partnerId);
 
-    [LoggerMessage(LogLevel.Information, "[PARTNER_MANAGER] Room state changed for user [{userId}] with state [{groupState:G}]")]
+    [LoggerMessage(LogLevel.Information,
+        "[PARTNER_MANAGER] Room state changed for user [{userId}] with state [{groupState:G}]")]
     public static partial void LogRoomStateChanged(this ILogger logger, GroupUserStates groupState, Guid userId);
 
     [LoggerMessage(LogLevel.Information, "[PARTNER_MANAGER] Partner added with user ID [{userId}]")]
     public static partial void LogPartnerAdded(this ILogger logger, Guid userId);
 
-    [LoggerMessage(LogLevel.Information, "[PARTNER_MANAGER] Partner using relay server [{relayServerAddress}] added with user ID [{userId}]")]
+    [LoggerMessage(LogLevel.Information,
+        "[PARTNER_MANAGER] Partner using relay server [{relayServerAddress}] added with user ID [{userId}]")]
     public static partial void LogRelayPartnerAdded(this ILogger logger, IPEndPoint relayServerAddress, Guid userId);
 
-    [LoggerMessage(LogLevel.Warning, "[PARTNER_MANAGER] Wrong relay server address assigned message received with user ID [{userId}]")]
+    [LoggerMessage(LogLevel.Warning,
+        "[PARTNER_MANAGER] Wrong relay server address assigned message received with user ID [{userId}]")]
     public static partial void LogWrongRelayServerAddressAssignedMessageReceived(this ILogger logger, Guid userId);
 
     [LoggerMessage(LogLevel.Information, "[PARTNER_MANAGER] Relay server address assigned [{serverAddress}]")]

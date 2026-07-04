@@ -5,12 +5,12 @@ using ConnectX.Client.Managers;
 using ConnectX.Client.Models;
 using ConnectX.Client.P2P;
 using ConnectX.Client.Route.Packet;
+using ConnectX.Shared.Helpers;
 using Hive.Both.General.Dispatchers;
 using Hive.Common.Shared.Helpers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using ConnectX.Shared.Helpers;
 using TaskHelper = ConnectX.Shared.Helpers.TaskHelper;
 
 #if DEBUG
@@ -377,7 +377,8 @@ internal static partial class RouterLoggers
     public static partial void LogP2PTransmitError(this ILogger logger, P2PTransmitError error, Guid from, Guid to,
         Guid originalTo);
 
-    [LoggerMessage(LogLevel.Warning, "[ROUTER] P2P packet received from {RemoteEndPoint} to {To}, but TTL is 0 now, discard this packet.")]
+    [LoggerMessage(LogLevel.Warning,
+        "[ROUTER] P2P packet received from {RemoteEndPoint} to {To}, but TTL is 0 now, discard this packet.")]
     public static partial void LogP2PPacketDiscarded(this ILogger logger, IPEndPoint? remoteEndPoint, Guid to);
 
     [LoggerMessage(LogLevel.Trace, "[ROUTER] P2P packet received from {RemoteEndPoint}, forwarding to {To}")]

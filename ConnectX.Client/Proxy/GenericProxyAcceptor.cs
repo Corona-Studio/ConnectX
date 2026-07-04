@@ -12,9 +12,6 @@ public class GenericProxyAcceptor : IDisposable
     private readonly ILogger _logger;
 
     private Socket? _acceptSocket;
-    private bool _socketAcceptLoopIsRunning;
-
-    public bool IsRunning => _socketAcceptLoopIsRunning;
 
     public GenericProxyAcceptor(
         Guid id,
@@ -32,6 +29,8 @@ public class GenericProxyAcceptor : IDisposable
         _cancellationToken = cancellationToken;
     }
 
+    public bool IsRunning { get; private set; }
+
     public ushort LocalMappingPort { get; }
     private ushort RemoteRealPort { get; }
 
@@ -46,7 +45,7 @@ public class GenericProxyAcceptor : IDisposable
 
     public Task StartAcceptAsync()
     {
-        if (_socketAcceptLoopIsRunning) return Task.CompletedTask;
+        if (IsRunning) return Task.CompletedTask;
 
         return Task.Run(async () =>
         {
@@ -63,12 +62,12 @@ public class GenericProxyAcceptor : IDisposable
 
                 _acceptSocket.Bind(ipe);
                 _acceptSocket.Listen(1000);
-                _socketAcceptLoopIsRunning = true;
+                IsRunning = true;
 
                 while (!_cancellationToken.IsCancellationRequested)
                 {
                     var tmp = await _acceptSocket.AcceptAsync(_cancellationToken);
-                     
+
                     tmp.NoDelay = true;
                     //tmp.LingerState = new LingerOption(true, 3);
 
@@ -88,7 +87,7 @@ public class GenericProxyAcceptor : IDisposable
             }
             finally
             {
-                _socketAcceptLoopIsRunning = false;
+                IsRunning = false;
             }
         }, _cancellationToken);
     }

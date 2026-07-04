@@ -45,7 +45,7 @@ public static class ClientFactory
         services.AddHostedService<FakeServerMultiCasterV6>();
 
         services.AddSingleton<PartnerManager>();
-        
+
         services.AddSingleton<Client>();
     }
 }

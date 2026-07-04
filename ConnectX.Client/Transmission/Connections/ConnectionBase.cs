@@ -1,11 +1,11 @@
 ﻿using ConnectX.Client.Interfaces;
+using ConnectX.Client.Route.Packet;
 using ConnectX.Shared.Interfaces;
 using Hive.Both.General.Dispatchers;
 using Hive.Codec.Abstractions;
+using Hive.Network.Shared;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using ConnectX.Client.Route.Packet;
-using Hive.Network.Shared;
 
 namespace ConnectX.Client.Transmission.Connections;
 
@@ -13,12 +13,12 @@ public abstract class ConnectionBase : ISender, ICanPing<Guid>
 {
     protected const int Timeout = 5000;
     protected const int BufferLength = 256;
-
-    protected readonly string Source;
     protected readonly IPacketCodec Codec;
-    protected readonly ILogger Logger;
 
     protected readonly IHostApplicationLifetime Lifetime;
+    protected readonly ILogger Logger;
+
+    protected readonly string Source;
 
     protected ConnectionBase(
         string source,
@@ -38,10 +38,16 @@ public abstract class ConnectionBase : ISender, ICanPing<Guid>
         Logger = logger;
     }
 
-    public Guid To { get; }
     public bool IsConnected { get; protected set; }
+
+    public Guid To { get; }
     public IDispatcher Dispatcher { get; }
     public bool ShouldUseDispatcherSenderInfo => false;
+
+    public void SendPingPacket<T>(T packet) where T : RouteLayerPacket
+    {
+        SendData(packet);
+    }
 
     public abstract void Send(ReadOnlyMemory<byte> payload);
 
@@ -55,11 +61,6 @@ public abstract class ConnectionBase : ISender, ICanPing<Guid>
         var buffer = stream.GetBuffer();
 
         Send(buffer.AsMemory(0, (int)stream.Length));
-    }
-
-    public void SendPingPacket<T>(T packet) where T : RouteLayerPacket
-    {
-        SendData(packet);
     }
 
     public virtual void Disconnect()

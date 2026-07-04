@@ -7,12 +7,12 @@ namespace ConnectX.Client.Models;
 public class SessionPlaceHolder : ISession
 {
     public static readonly SessionPlaceHolder Shared = new();
+    public bool StreamMode { get; set; } = false;
+    public long LastHeartBeatTime => throw new NotImplementedException();
 
     public SessionId Id => new();
-    public bool StreamMode { get; set; } = false;
     public IPEndPoint LocalEndPoint => new(0, 0);
     public IPEndPoint RemoteEndPoint => new(0, 0);
-    public long LastHeartBeatTime => throw new NotImplementedException();
 
     public event SessionReceivedHandler? OnMessageReceived;
 

@@ -1,6 +1,6 @@
-﻿using Hive.Codec.Shared;
+﻿using System.Net;
+using Hive.Codec.Shared;
 using MemoryPack;
-using System.Net;
 
 namespace ConnectX.Shared.Messages.Relay;
 

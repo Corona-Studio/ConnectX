@@ -12,17 +12,19 @@ using Hive.Both.General.Dispatchers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using TaskHelper = Hive.Common.Shared.Helpers.TaskHelper;
 
 namespace ConnectX.Client.Managers;
 
 public abstract class GenericProxyManager : BackgroundService
 {
-    //使用一个二元组确定一个连接
-    private readonly ConcurrentDictionary<TunnelIdentifier, GenericProxyPair> _proxies = [];
     private readonly ConcurrentDictionary<TunnelIdentifier, Socket> _acceptedSockets = [];
     private readonly ConcurrentDictionary<ValueTuple<Guid, ushort>, GenericProxyAcceptor> _acceptors = [];
 
     private readonly IHostApplicationLifetime _lifetime;
+
+    //使用一个二元组确定一个连接
+    private readonly ConcurrentDictionary<TunnelIdentifier, GenericProxyPair> _proxies = [];
     private readonly IServiceProvider _serviceProvider;
     protected readonly ILogger Logger;
 
@@ -264,7 +266,8 @@ public abstract class GenericProxyManager : BackgroundService
             if (oldAcceptor.IsRunning)
             {
                 _acceptors.AddOrUpdate((partnerId, remoteRealServerPort), _ => oldAcceptor, (_, _) => oldAcceptor);
-                throw new InvalidOperationException($"There has been a acceptor with same key: {partnerId}-{remoteRealServerPort}");
+                throw new InvalidOperationException(
+                    $"There has been a acceptor with same key: {partnerId}-{remoteRealServerPort}");
             }
 
             oldAcceptor.Dispose();
@@ -308,7 +311,7 @@ public abstract class GenericProxyManager : BackgroundService
 
         Logger.LogCreateAcceptor(key, isIpv6 && Socket.OSSupportsIPv6, localMapPort);
 
-        Hive.Common.Shared.Helpers.TaskHelper.FireAndForget(acceptor.StartAcceptAsync);
+        TaskHelper.FireAndForget(acceptor.StartAcceptAsync);
 
         return acceptor;
     }
@@ -327,12 +330,14 @@ public abstract class GenericProxyManager : BackgroundService
             : CreateAcceptor(partnerId, isIpv6, localMapPortGetter(), remoteRealServerPort, sender);
     }
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.CompletedTask;
+    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        return Task.CompletedTask;
+    }
 
     public virtual void RemoveAllProxies()
     {
         foreach (var (_, value) in _acceptors)
-        {
             try
             {
                 value.Dispose();
@@ -341,11 +346,10 @@ public abstract class GenericProxyManager : BackgroundService
             {
                 // ignored
             }
-        }
+
         _acceptors.Clear();
 
         foreach (var proxyPair in _proxies)
-        {
             try
             {
                 proxyPair.Value.Dispose();
@@ -354,11 +358,10 @@ public abstract class GenericProxyManager : BackgroundService
             {
                 // ignored
             }
-        }
+
         _proxies.Clear();
 
         foreach (var acceptedSocket in _acceptedSockets)
-        {
             try
             {
                 acceptedSocket.Value.Close();
@@ -367,7 +370,7 @@ public abstract class GenericProxyManager : BackgroundService
             {
                 // ignored
             }
-        }
+
         _acceptedSockets.Clear();
 
         Logger.LogGenProxiesCleared();
@@ -405,8 +408,10 @@ internal static partial class GenericProxyManagerLoggers
     [LoggerMessage(LogLevel.Error, "[GEN_PROXY_MANAGER] Can not get remote endpoint")]
     public static partial void LogErrorCanNotGetRemoteEndPoint(this ILogger logger);
 
-    [LoggerMessage(LogLevel.Information, "[GEN_PROXY_MANAGER] Create acceptor {Key}, is IPV6 [{isIpv6}], local map port [{localMapPort}]")]
-    public static partial void LogCreateAcceptor(this ILogger logger, (Guid, ushort) key, bool isIpv6, ushort localMapPort);
+    [LoggerMessage(LogLevel.Information,
+        "[GEN_PROXY_MANAGER] Create acceptor {Key}, is IPV6 [{isIpv6}], local map port [{localMapPort}]")]
+    public static partial void LogCreateAcceptor(this ILogger logger, (Guid, ushort) key, bool isIpv6,
+        ushort localMapPort);
 
     [LoggerMessage(LogLevel.Information, "[GEN_PROXY_MANAGER] Notify server proxy need to disconnect {Id}")]
     public static partial void LogNotifyServerProxyNeedToDisconnect(this ILogger logger, TunnelIdentifier id);

@@ -10,9 +10,9 @@ namespace ConnectX.Client;
 public class PingChecker<TId>
 {
     private readonly ILogger _logger;
+    private readonly ICanPing<TId> _pingTarget;
     private readonly ConcurrentDictionary<uint, Pong> _pongPackets = new();
     private readonly Guid _selfId;
-    private readonly ICanPing<TId> _pingTarget;
     private readonly Guid _targetId;
 
     private uint _lastPingId;
@@ -110,8 +110,10 @@ public class PingChecker<TId>
 
 internal static partial class PingCheckerLoggers
 {
-    [LoggerMessage(LogLevel.Debug, "[PING_CHECKER] Ping received from {From}, delay: {DelayInMs:F} ms, send time: {SendTime}, receive time: {ReceiveTime}, ")]
-    public static partial void LogPingReceived(this ILogger logger, string from, double delayInMs, long sendTime, long receiveTime);
+    [LoggerMessage(LogLevel.Debug,
+        "[PING_CHECKER] Ping received from {From}, delay: {DelayInMs:F} ms, send time: {SendTime}, receive time: {ReceiveTime}, ")]
+    public static partial void LogPingReceived(this ILogger logger, string from, double delayInMs, long sendTime,
+        long receiveTime);
 
     [LoggerMessage(LogLevel.Debug, "[PING_CHECKER] Send Pong to {To}")]
     public static partial void LogSendPong(this ILogger logger, string to);

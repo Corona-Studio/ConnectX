@@ -41,8 +41,7 @@ public abstract partial class P2PConContext
         PublicAddress = context.PublicAddress;
     }
 
-    [MemoryPackAllowSerialize]
-    public IPAddress PublicAddress { get; init; }
+    [MemoryPackAllowSerialize] public IPAddress PublicAddress { get; init; }
 
     public int Diff { get; init; }
     public bool SameIfNotConflict { get; init; }

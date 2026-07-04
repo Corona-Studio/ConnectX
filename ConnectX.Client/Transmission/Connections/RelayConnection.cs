@@ -18,29 +18,29 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Snappier;
+using TaskHelper = Hive.Common.Shared.Helpers.TaskHelper;
 
 namespace ConnectX.Client.Transmission.Connections;
 
 public sealed class RelayConnection : ConnectionBase, IDatagramTransmit<RelayDatagram>
 {
-    private ISession? _relayServerDataLink;
-    private ISession? _relayServerWorkerLink;
-    
-    private DateTime _lastHeartBeatTime;
-
-    private readonly IPEndPoint _relayEndPoint;
-    private readonly RelayPacketDispatcher _relayPacketDispatcher;
-    private readonly IConnector<TcpSession> _tcpConnector;
-    private readonly IRoomInfoManager _roomInfoManager;
-    private readonly IServerLinkHolder _serverLinkHolder;
-    private readonly IServiceProvider _serviceProvider;
-
-    private CancellationToken _linkCt;
-
     private static readonly ConcurrentDictionary<IPEndPoint, ISession> RelayServerDataLinkPool = new();
     private static readonly ConcurrentDictionary<IPEndPoint, SemaphoreSlim> ConnectionLocks = new();
     private static readonly ConcurrentDictionary<IPEndPoint, CancellationTokenSource> ConnectionCts = new();
     private static readonly ConcurrentDictionary<IPEndPoint, uint> ConnectionRefCount = new();
+
+    private readonly IPEndPoint _relayEndPoint;
+    private readonly RelayPacketDispatcher _relayPacketDispatcher;
+    private readonly IRoomInfoManager _roomInfoManager;
+    private readonly IServerLinkHolder _serverLinkHolder;
+    private readonly IServiceProvider _serviceProvider;
+    private readonly IConnector<TcpSession> _tcpConnector;
+
+    private DateTime _lastHeartBeatTime;
+
+    private CancellationToken _linkCt;
+    private ISession? _relayServerDataLink;
+    private ISession? _relayServerWorkerLink;
 
     public RelayConnection(
         Guid targetId,
@@ -66,6 +66,17 @@ public sealed class RelayConnection : ConnectionBase, IDatagramTransmit<RelayDat
         dispatcher.AddHandler<HeartBeat>(OnHeartBeatReceived);
     }
 
+    public void SendDatagram(RelayDatagram datagram)
+    {
+        if (!IsConnected || _relayServerDataLink == null)
+        {
+            Logger.LogSendFailedBecauseLinkNotReadyYet(Source, To);
+            return;
+        }
+
+        Dispatcher.SendAsync(_relayServerDataLink, datagram, _linkCt).Forget();
+    }
+
     private void OnHeartBeatReceived(MessageContext<HeartBeat> obj)
     {
         _lastHeartBeatTime = DateTime.UtcNow;
@@ -75,10 +86,8 @@ public sealed class RelayConnection : ConnectionBase, IDatagramTransmit<RelayDat
     private void OnUnwrappedRelayDatagramReceived(MessageContext<UnwrappedRelayDatagram> ctx)
     {
         if (ctx.Message.From != To)
-        {
             // we want to make sure we are processing the right packet
             return;
-        }
 
         if (!IsConnected || _relayServerDataLink == null)
         {
@@ -301,8 +310,8 @@ public sealed class RelayConnection : ConnectionBase, IDatagramTransmit<RelayDat
 
             IsConnected = dataLinkCreated && workerLinkCreated;
 
-            Hive.Common.Shared.Helpers.TaskHelper.FireAndForget(SendHeartBeatAsync);
-            Hive.Common.Shared.Helpers.TaskHelper.FireAndForget(CheckServerLivenessAsync);
+            TaskHelper.FireAndForget(SendHeartBeatAsync);
+            TaskHelper.FireAndForget(CheckServerLivenessAsync);
 
             return true;
         }
@@ -391,10 +400,8 @@ public sealed class RelayConnection : ConnectionBase, IDatagramTransmit<RelayDat
         _relayServerDataLink = null;
 
         if (count > 1)
-        {
             // There are still other connections using this link, so we don't close it.
             return;
-        }
 
         RelayServerDataLinkPool.TryRemove(_relayEndPoint, out _);
 
@@ -405,20 +412,9 @@ public sealed class RelayConnection : ConnectionBase, IDatagramTransmit<RelayDat
         }
 
         if (_relayServerDataLink == null) return;
-            _relayServerDataLink.Close();
+        _relayServerDataLink.Close();
 
         Logger.LogRelayDisconnected(_relayEndPoint);
-    }
-
-    public void SendDatagram(RelayDatagram datagram)
-    {
-        if (!IsConnected || _relayServerDataLink == null)
-        {
-            Logger.LogSendFailedBecauseLinkNotReadyYet(Source, To);
-            return;
-        }
-
-        Dispatcher.SendAsync(_relayServerDataLink, datagram, _linkCt).Forget();
     }
 
     public void SendByWorker(ReadOnlyMemory<byte> data)
@@ -450,7 +446,8 @@ internal static partial class RelayConnectionLoggers
     public static partial void LogFailedToConnectToRelayServer(this ILogger logger, IPEndPoint relayEndPoint);
 
     [LoggerMessage(LogLevel.Error, "[RELAY_CONN] Failed to connect to relay server [{relayEndPoint}]")]
-    public static partial void LogFailedToConnectToRelayServerWithException(this ILogger logger, Exception ex, IPEndPoint relayEndPoint);
+    public static partial void LogFailedToConnectToRelayServerWithException(this ILogger logger, Exception ex,
+        IPEndPoint relayEndPoint);
 
     [LoggerMessage(LogLevel.Information, "[RELAY_CONN] Heartbeat started")]
     public static partial void LogHeartbeatStarted(this ILogger logger);
@@ -461,7 +458,8 @@ internal static partial class RelayConnectionLoggers
     [LoggerMessage(LogLevel.Information, "[RELAY_CONN] Connected to relay server [{relayEndPoint}]")]
     public static partial void LogConnectedToRelayServer(this ILogger logger, IPEndPoint relayEndPoint);
 
-    [LoggerMessage(LogLevel.Error, "[RELAY_CONN] Send failed because link is not ready yet. (Source: {source}, Target: {target})")]
+    [LoggerMessage(LogLevel.Error,
+        "[RELAY_CONN] Send failed because link is not ready yet. (Source: {source}, Target: {target})")]
     public static partial void LogSendFailedBecauseLinkNotReadyYet(this ILogger logger, string source, Guid target);
 
     [LoggerMessage(LogLevel.Information, "[RELAY_CONN] Connected to relay server [{relayEndPoint}] using pool")]
@@ -470,13 +468,15 @@ internal static partial class RelayConnectionLoggers
     [LoggerMessage(LogLevel.Debug, "[RELAY_CONN] Waiting for connection lock [{relayEndPoint}]")]
     public static partial void LogWaitingForConnectionLock(this ILogger logger, IPEndPoint relayEndPoint);
 
-    [LoggerMessage(LogLevel.Error, "[RELAY_CONN] Receive failed because link is down. (Source: {source}, Target: {target})")]
+    [LoggerMessage(LogLevel.Error,
+        "[RELAY_CONN] Receive failed because link is down. (Source: {source}, Target: {target})")]
     public static partial void LogReceiveFailedBecauseLinkDown(this ILogger logger, string source, Guid target);
 
     [LoggerMessage(LogLevel.Critical, "[RELAY_CONN] Failed to update ref count for link [{endPoint}]")]
     public static partial void LogFailedToUpdateRefCountForLink(this ILogger logger, IPEndPoint endPoint);
-    
-    [LoggerMessage(LogLevel.Information, "[RELAY_CONN] Link with server [{relayEndPoint}] is down, last heartbeat received [{seconds} seconds ago]")]
+
+    [LoggerMessage(LogLevel.Information,
+        "[RELAY_CONN] Link with server [{relayEndPoint}] is down, last heartbeat received [{seconds} seconds ago]")]
     public static partial void LogServerHeartbeatTimeout(this ILogger logger, IPEndPoint relayEndPoint, double seconds);
 
     [LoggerMessage(LogLevel.Information, "[RELAY_CONN] Closing old link [{sessionId}]")]
@@ -497,9 +497,12 @@ internal static partial class RelayConnectionLoggers
     [LoggerMessage(LogLevel.Error, "[RELAY_CONN] Failed to establish worker session [{relayEndPoint}]")]
     public static partial void LogFailedToEstablishingWorkerSession(this ILogger logger, IPEndPoint relayEndPoint);
 
-    [LoggerMessage(LogLevel.Debug, "[RELAY_CONN] Underperformed compression! Original length [{original} bytes], compressed length [{compressed} bytes].")]
+    [LoggerMessage(LogLevel.Debug,
+        "[RELAY_CONN] Underperformed compression! Original length [{original} bytes], compressed length [{compressed} bytes].")]
     public static partial void LogUnderperformedCompression(this ILogger logger, int original, int compressed);
 
-    [LoggerMessage(LogLevel.Critical, "[RELAY_CONN] Failed to decompress message [{length} bytes] from [{source}] to [{target}]")]
-    public static partial void LogFailedToDecompressMessage(this ILogger logger, Exception ex, long length, string source, Guid target);
+    [LoggerMessage(LogLevel.Critical,
+        "[RELAY_CONN] Failed to decompress message [{length} bytes] from [{source}] to [{target}]")]
+    public static partial void LogFailedToDecompressMessage(this ILogger logger, Exception ex, long length,
+        string source, Guid target);
 }

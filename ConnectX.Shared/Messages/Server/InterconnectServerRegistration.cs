@@ -1,8 +1,8 @@
-﻿using Hive.Codec.Shared;
-using MemoryPack;
-using System.Net;
+﻿using System.Net;
 using System.Text.Json.Serialization;
 using ConnectX.Shared.JsonConverters;
+using Hive.Codec.Shared;
+using MemoryPack;
 
 namespace ConnectX.Shared.Messages.Server;
 

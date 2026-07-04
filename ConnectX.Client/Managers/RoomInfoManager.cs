@@ -37,6 +37,37 @@ public class RoomInfoManager(
         }
     }
 
+    public async Task<GroupInfo?> AcquireGroupInfoAsync(Guid groupId)
+    {
+        if (!serverLinkHolder.IsConnected) return null;
+        if (!serverLinkHolder.IsSignedIn) return null;
+
+        var message = new AcquireGroupInfo();
+        var groupInfo =
+            await dispatcher.SendAndListenOnce<AcquireGroupInfo, GroupInfo>(
+                serverLinkHolder.ServerSession!,
+                message);
+
+        if (groupInfo == null ||
+            groupInfo == GroupInfo.Invalid ||
+            groupInfo.Users.Length == 0)
+        {
+            logger.LogFailedToAcquireGroupInfo(groupId);
+
+            return null;
+        }
+
+        CurrentGroupInfo = groupInfo;
+        OnGroupInfoUpdated?.Invoke(groupInfo);
+
+        logger.LogRoomInfoAcquired();
+
+        return groupInfo;
+    }
+
+    public event Action<UserInfo[]>? OnMemberAddressInfoUpdated;
+    public event Action<GroupInfo>? OnGroupInfoUpdated;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var needToRefreshRoomInfo = false;
@@ -79,8 +110,8 @@ public class RoomInfoManager(
             }
 
             if ((self.NetworkIpAddresses == null ||
-                self.NetworkIpAddresses.Length == 0 ||
-                string.IsNullOrEmpty(self.NetworkNodeId)) &&
+                 self.NetworkIpAddresses.Length == 0 ||
+                 string.IsNullOrEmpty(self.NetworkNodeId)) &&
                 OperatingSystem.IsWindows() &&
                 !CurrentGroupInfo.UseRelayServer)
             {
@@ -163,37 +194,6 @@ public class RoomInfoManager(
             await Task.Delay(1000, stoppingToken);
         }
     }
-
-    public async Task<GroupInfo?> AcquireGroupInfoAsync(Guid groupId)
-    {
-        if (!serverLinkHolder.IsConnected) return null;
-        if (!serverLinkHolder.IsSignedIn) return null;
-
-        var message = new AcquireGroupInfo();
-        var groupInfo =
-            await dispatcher.SendAndListenOnce<AcquireGroupInfo, GroupInfo>(
-                serverLinkHolder.ServerSession!,
-                message);
-
-        if (groupInfo == null ||
-            groupInfo == GroupInfo.Invalid ||
-            groupInfo.Users.Length == 0)
-        {
-            logger.LogFailedToAcquireGroupInfo(groupId);
-
-            return null;
-        }
-
-        CurrentGroupInfo = groupInfo;
-        OnGroupInfoUpdated?.Invoke(groupInfo);
-
-        logger.LogRoomInfoAcquired();
-
-        return groupInfo;
-    }
-
-    public event Action<UserInfo[]>? OnMemberAddressInfoUpdated;
-    public event Action<GroupInfo>? OnGroupInfoUpdated;
 }
 
 internal static partial class RoomInfoManagerLoggers
@@ -204,7 +204,8 @@ internal static partial class RoomInfoManagerLoggers
     [LoggerMessage(LogLevel.Error, "[ROOM_INFO_MANAGER] Can not find self in the room info, possible internal error!")]
     public static partial void LogSelfNotFound(this ILogger logger);
 
-    [LoggerMessage(LogLevel.Warning, "[ROOM_INFO_MANAGER] Failed to update current room member info, waiting for the next iteration...")]
+    [LoggerMessage(LogLevel.Warning,
+        "[ROOM_INFO_MANAGER] Failed to update current room member info, waiting for the next iteration...")]
     public static partial void LogFailedToUpdateMemberInfo(this ILogger logger);
 
     [LoggerMessage(LogLevel.Information, "[ROOM_INFO_MANAGER] Room info outdated, updating...")]

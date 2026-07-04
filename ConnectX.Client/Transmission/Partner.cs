@@ -1,4 +1,5 @@
 ﻿using ConnectX.Client.Transmission.Connections;
+using Hive.Common.Shared.Helpers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -12,9 +13,9 @@ public class Partner
     private readonly Guid _selfId;
     private readonly IServiceProvider _serviceProvider;
     private bool _isLastTimeConnected;
-    private PingChecker<Guid>? _pingChecker;
 
     private CancellationTokenSource? _linkedCts;
+    private PingChecker<Guid>? _pingChecker;
 
     public Partner(
         Guid selfId,
@@ -28,13 +29,13 @@ public class Partner
         PartnerId = partnerId;
 
         _selfId = selfId;
-        
+
         _serviceProvider = serviceProvider;
         _logger = logger;
 
         _linkedCts = CancellationTokenSource.CreateLinkedTokenSource(lifetime.ApplicationStopping);
 
-        Hive.Common.Shared.Helpers.TaskHelper.FireAndForget(() => KeepConnectAsync(_linkedCts.Token));
+        TaskHelper.FireAndForget(() => KeepConnectAsync(_linkedCts.Token));
     }
 
     public Guid PartnerId { get; }
@@ -73,7 +74,7 @@ public class Partner
             }
             else
             {
-                if (_isLastTimeConnected == false)
+                if (!_isLastTimeConnected)
                 {
                     _logger.LogConnectedWithPartnerId(PartnerId);
 

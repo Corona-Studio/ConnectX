@@ -1,14 +1,14 @@
-﻿using ConnectX.Client.Models;
+﻿using System.Buffers;
+using System.Collections;
+using ConnectX.Client.Interfaces;
+using ConnectX.Client.Messages;
+using ConnectX.Client.Models;
 using ConnectX.Client.Route;
 using Hive.Both.General.Dispatchers;
 using Hive.Codec.Abstractions;
+using Hive.Common.Shared.Helpers;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using System.Buffers;
-using System.Collections;
-using ConnectX.Shared.Helpers;
-using ConnectX.Client.Interfaces;
-using ConnectX.Client.Messages;
 
 namespace ConnectX.Client.Transmission.Connections;
 
@@ -32,14 +32,22 @@ public sealed class P2PConnection : ConnectionBase, IDatagramTransmit<TransDatag
         _routerPacketDispatcher = routerPacketDispatcher;
         _routerPacketDispatcher.OnReceive<TransDatagram>(OnTransDatagramReceived);
 
-        Hive.Common.Shared.Helpers.TaskHelper.FireAndForget(StartResendCoroutineAsync);
+        TaskHelper.FireAndForget(StartResendCoroutineAsync);
+    }
+
+    public void SendDatagram(TransDatagram datagram)
+    {
+        _sendBufferAckFlag[_sendPointer] = false;
+        _sendPointer = (_sendPointer + 1) % BufferLength;
+
+        _routerPacketDispatcher.Send(To, datagram);
     }
 
     private async Task StartResendCoroutineAsync()
     {
-        while (Lifetime.ApplicationStopping.IsCancellationRequested == false)
+        while (!Lifetime.ApplicationStopping.IsCancellationRequested)
         {
-            await TaskHelper.WaitUntilAsync(NeedResend, Lifetime.ApplicationStopping);
+            await Shared.Helpers.TaskHelper.WaitUntilAsync(NeedResend, Lifetime.ApplicationStopping);
 
             if (!Lifetime.ApplicationStopping.IsCancellationRequested) Logger.LogResendCoroutineStarted(Source, To);
         }
@@ -144,13 +152,5 @@ public sealed class P2PConnection : ConnectionBase, IDatagramTransmit<TransDatag
                  _ackPointer = (_ackPointer + 1) % BufferLength)
                 _sendBufferAckFlag[_ackPointer] = false;
         }
-    }
-
-    public void SendDatagram(TransDatagram datagram)
-    {
-        _sendBufferAckFlag[_sendPointer] = false;
-        _sendPointer = (_sendPointer + 1) % BufferLength;
-
-        _routerPacketDispatcher.Send(To, datagram);
     }
 }

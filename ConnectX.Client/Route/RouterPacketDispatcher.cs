@@ -1,10 +1,10 @@
-﻿using ConnectX.Client.Models;
+﻿using System.Buffers;
+using ConnectX.Client.Models;
 using ConnectX.Client.Route.Packet;
 using ConnectX.Shared.Helpers;
 using Hive.Codec.Abstractions;
 using Hive.Network.Shared;
 using Microsoft.Extensions.Logging;
-using System.Buffers;
 
 namespace ConnectX.Client.Route;
 
@@ -67,7 +67,8 @@ public sealed class RouterPacketDispatcher : PacketDispatcherBase<P2PPacket>
         ReceiveCallbackDic[typeof(T)].TempCallback[target] = (T t, PacketContext _) => { received = processor(t); };
         SendToRouter(target, data);
 
-        await TaskHelper.WaitUntilAsync(() => received, token == CancellationToken.None ? CancelTokenSource.Token : token);
+        await TaskHelper.WaitUntilAsync(() => received,
+            token == CancellationToken.None ? CancelTokenSource.Token : token);
 
         ReceiveCallbackDic[typeof(T)].TempCallback.Remove(target);
 

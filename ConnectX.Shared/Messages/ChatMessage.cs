@@ -7,6 +7,5 @@ namespace ConnectX.Shared.Messages;
 [MemoryPackable]
 public partial class ChatMessage
 {
-    [BrotliStringFormatter]
-    public required string Message { get; init; }
+    [BrotliStringFormatter] public required string Message { get; init; }
 }

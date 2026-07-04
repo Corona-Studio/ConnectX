@@ -1,18 +1,18 @@
-﻿using Hive.Network.Abstractions.Session;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
 using ConnectX.Client.Network.ZeroTier.Tcp;
 using Hive.Common.Shared.Helpers;
+using Hive.Network.Abstractions.Session;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Socket = ZeroTier.Sockets.Socket;
 using SocketException = ZeroTier.Sockets.SocketException;
 
 namespace ConnectX.Client.P2P.LinkMaker;
 
 /// <summary>
-/// 基于 ZeroTier 的 TCP 单端口连接建立器
-/// 如果是主动方，那么就是接受远端；如果是被动方，那么就是连接远端
+///     基于 ZeroTier 的 TCP 单端口连接建立器
+///     如果是主动方，那么就是接受远端；如果是被动方，那么就是连接远端
 /// </summary>
 /// <returns></returns>
 public sealed class ZtTcpSinglePortLinkMaker(
@@ -73,7 +73,10 @@ public sealed class ZtTcpSinglePortLinkMaker(
 
                     ArgumentNullException.ThrowIfNull(acceptedLink);
                 }
-                catch (ArgumentNullException) { continue; }
+                catch (ArgumentNullException)
+                {
+                    continue;
+                }
                 catch (SocketException e)
                 {
                     Logger.LogFailedToAcceptConnection(e, tryTime);
@@ -140,7 +143,10 @@ public sealed class ZtTcpSinglePortLinkMaker(
 
                     ArgumentNullException.ThrowIfNull(connectLink);
                 }
-                catch (ArgumentNullException) { continue; }
+                catch (ArgumentNullException)
+                {
+                    continue;
+                }
                 catch (SocketException e)
                 {
                     Logger.LogFailedToConnectToRemoteIpe(e, LocalPort, RemoteIpe, tryTime);
@@ -179,10 +185,7 @@ public sealed class ZtTcpSinglePortLinkMaker(
 
     public override async Task<ISession?> BuildLinkAsync()
     {
-        if (isInitiator)
-        {
-            return await AcceptConnAsync();
-        }
+        if (isInitiator) return await AcceptConnAsync();
 
         return await ConnectToRemoteAsync();
     }
@@ -190,8 +193,10 @@ public sealed class ZtTcpSinglePortLinkMaker(
 
 internal static partial class ZtTcpSinglePortLinkMakerLoggers
 {
-    [LoggerMessage(LogLevel.Information, "[ZT_TCP_S2S] Established [{type}] session info: [Local {local}] [Remote {remote}]")]
-    public static partial void LogEstablishSessionInfo(this ILogger logger, string type, IPEndPoint? local, IPEndPoint? remote);
+    [LoggerMessage(LogLevel.Information,
+        "[ZT_TCP_S2S] Established [{type}] session info: [Local {local}] [Remote {remote}]")]
+    public static partial void LogEstablishSessionInfo(this ILogger logger, string type, IPEndPoint? local,
+        IPEndPoint? remote);
 
     [LoggerMessage(LogLevel.Information, "[ZT_TCP_S2S] Connection established.")]
     public static partial void LogConnectionEstablished(this ILogger logger);

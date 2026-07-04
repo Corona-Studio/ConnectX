@@ -121,10 +121,7 @@ public class ZeroTierNodeLinkHolder(ILogger<ZeroTierNodeLinkHolder> logger) : Ba
 
         logger.LogNumOfAssignedAddresses(addresses.Count);
 
-        foreach (var (index, address) in addresses.Index())
-        {
-            logger.LogAssignedAddress(index, address);
-        }
+        foreach (var (index, address) in addresses.Index()) logger.LogAssignedAddress(index, address);
 
         _networkId = networkId;
 
@@ -142,6 +139,18 @@ public class ZeroTierNodeLinkHolder(ILogger<ZeroTierNodeLinkHolder> logger) : Ba
         return Task.CompletedTask;
     }
 
+    public override Task StopAsync(CancellationToken cancellationToken)
+    {
+        Node?.Free();
+        Node?.Stop();
+        Node = null;
+        _networkId = null;
+
+        logger.LogZeroTierNodeLinkHolderStopped();
+
+        return base.StopAsync(cancellationToken);
+    }
+
     private void OnReceivedZeroTierEvent(Event nodeEvent)
     {
         logger.LogEventReceived(nodeEvent.Code, nodeEvent.Name);
@@ -153,10 +162,8 @@ public class ZeroTierNodeLinkHolder(ILogger<ZeroTierNodeLinkHolder> logger) : Ba
         while (!stoppingToken.IsCancellationRequested)
         {
             if (Node == null)
-            {
                 // Node is not initialized because of error
                 break;
-            }
 
             if (!IsNodeOnline() || !_networkId.HasValue)
             {
@@ -174,18 +181,6 @@ public class ZeroTierNodeLinkHolder(ILogger<ZeroTierNodeLinkHolder> logger) : Ba
 
             await Task.Delay(1000, stoppingToken);
         }
-    }
-
-    public override Task StopAsync(CancellationToken cancellationToken)
-    {
-        Node?.Free();
-        Node?.Stop();
-        Node = null;
-        _networkId = null;
-
-        logger.LogZeroTierNodeLinkHolderStopped();
-
-        return base.StopAsync(cancellationToken);
     }
 }
 

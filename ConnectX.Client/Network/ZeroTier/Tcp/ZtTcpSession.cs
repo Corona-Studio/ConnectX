@@ -1,18 +1,18 @@
 ﻿using System.Buffers;
-using Hive.Network.Shared;
-using Microsoft.Extensions.Logging;
+using System.IO.Pipelines;
 using System.Net;
 using System.Net.Sockets;
+using Hive.Network.Shared;
 using Hive.Network.Shared.Session;
+using Microsoft.Extensions.Logging;
 using Socket = ZeroTier.Sockets.Socket;
-using System.IO.Pipelines;
 
 namespace ConnectX.Client.Network.ZeroTier.Tcp;
 
 public sealed class ZtTcpSession : AbstractSession
 {
-    private bool _closed;
     private readonly bool _isAcceptedSocket;
+    private bool _closed;
 
     public ZtTcpSession(
         int sessionId,

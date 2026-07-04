@@ -1,13 +1,13 @@
-﻿using ConnectX.Client.Interfaces;
+﻿using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using ConnectX.Client.Interfaces;
 using ConnectX.Client.Managers;
 using ConnectX.Client.Messages.Proxy.MulticastMessages;
 using ConnectX.Client.Models;
 using ConnectX.Client.Route;
 using ConnectX.Client.Transmission;
 using Microsoft.Extensions.Logging;
-using System.Net;
-using System.Net.Sockets;
-using System.Text;
 
 namespace ConnectX.Client.Proxy.FakeServerMultiCasters;
 
@@ -56,7 +56,8 @@ public sealed class FakeServerMultiCasterV4(
 
             var localIp = GetLocalIpAddress();
 
-            socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface, localIp.GetAddressBytes());
+            socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface,
+                localIp.GetAddressBytes());
             socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 255);
             socket.Bind(new IPEndPoint(localIp, 0));
 

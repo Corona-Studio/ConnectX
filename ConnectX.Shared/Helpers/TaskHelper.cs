@@ -21,7 +21,6 @@ public static class TaskHelper
     public static async ValueTask WaitUntilAsync(Func<bool> predicate, CancellationToken cancellationToken = default)
     {
         while (!predicate())
-        {
             try
             {
                 await Task.Delay(100, cancellationToken);
@@ -30,6 +29,5 @@ public static class TaskHelper
             {
                 break;
             }
-        }
     }
 }

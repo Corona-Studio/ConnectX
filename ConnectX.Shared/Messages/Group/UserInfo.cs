@@ -14,8 +14,7 @@ public partial class UserInfo : IEquatable<UserInfo>
     public string? NetworkNodeId { get; init; }
     public IPAddress[]? NetworkIpAddresses { get; init; }
 
-    [MemoryPackAllowSerialize]
-    public IPEndPoint? RelayServerAddress { get; init; }
+    [MemoryPackAllowSerialize] public IPEndPoint? RelayServerAddress { get; init; }
 
     public bool Equals(UserInfo? other)
     {
@@ -40,6 +39,7 @@ public partial class UserInfo : IEquatable<UserInfo>
 
     public override int GetHashCode()
     {
-        return HashCode.Combine(JoinP2PNetwork, DisplayName, UserId, NetworkNodeId, NetworkIpAddresses, RelayServerAddress);
+        return HashCode.Combine(JoinP2PNetwork, DisplayName, UserId, NetworkNodeId, NetworkIpAddresses,
+            RelayServerAddress);
     }
 }

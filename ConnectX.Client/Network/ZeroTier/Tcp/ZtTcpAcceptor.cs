@@ -1,9 +1,9 @@
-﻿using Hive.Network.Abstractions;
+﻿using System.Net;
+using System.Net.Sockets;
+using Hive.Network.Abstractions;
 using Hive.Network.Shared.Session;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using System.Net;
-using System.Net.Sockets;
 using Socket = ZeroTier.Sockets.Socket;
 
 namespace ConnectX.Client.Network.ZeroTier.Tcp;

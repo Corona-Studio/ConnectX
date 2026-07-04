@@ -2,6 +2,7 @@
 using System.Net.Sockets;
 using System.Threading.Channels;
 using ConnectX.Client.Messages.Proxy;
+using Hive.Common.Shared.Helpers;
 using Microsoft.Extensions.Logging;
 
 namespace ConnectX.Client.Proxy;
@@ -12,21 +13,21 @@ public abstract class GenericProxyBase : IDisposable
     private const int RetryInterval = 500;
     private const int TryTime = 20;
 
-    private bool _disposed;
-
     private readonly CancellationTokenSource _combinedTokenSource;
     private readonly CancellationTokenSource _internalTokenSource;
 
     protected readonly CancellationToken CancellationToken;
 
-    protected Channel<ForwardPacketCarrier>? InwardBuffersQueue;
-    protected Channel<ForwardPacketCarrier>? OutwardBuffersQueue;
+    protected readonly ILogger Logger;
 
     public readonly List<Func<ForwardPacketCarrier, bool>> OutwardSenders = [];
     public readonly TunnelIdentifier TunnelIdentifier;
+
+    private bool _disposed;
     private Socket? _innerSocket;
 
-    protected readonly ILogger Logger;
+    protected Channel<ForwardPacketCarrier>? InwardBuffersQueue;
+    protected Channel<ForwardPacketCarrier>? OutwardBuffersQueue;
 
     protected GenericProxyBase(
         TunnelIdentifier tunnelIdentifier,
@@ -43,23 +44,6 @@ public abstract class GenericProxyBase : IDisposable
 
     private ushort LocalServerPort => TunnelIdentifier.LocalRealPort;
     private ushort RemoteClientPort => TunnelIdentifier.RemoteRealPort;
-
-    private void ResetChannels()
-    {
-        InwardBuffersQueue?.Writer.Complete();
-        InwardBuffersQueue = Channel.CreateUnbounded<ForwardPacketCarrier>(new UnboundedChannelOptions
-        {
-            SingleReader = true,
-            SingleWriter = true
-        });
-
-        OutwardBuffersQueue?.Writer.Complete();
-        OutwardBuffersQueue = Channel.CreateUnbounded<ForwardPacketCarrier>(new UnboundedChannelOptions
-        { 
-            SingleReader = true,
-            SingleWriter = false
-        });
-    }
 
     public void Dispose()
     {
@@ -96,6 +80,23 @@ public abstract class GenericProxyBase : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    private void ResetChannels()
+    {
+        InwardBuffersQueue?.Writer.Complete();
+        InwardBuffersQueue = Channel.CreateUnbounded<ForwardPacketCarrier>(new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = true
+        });
+
+        OutwardBuffersQueue?.Writer.Complete();
+        OutwardBuffersQueue = Channel.CreateUnbounded<ForwardPacketCarrier>(new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = false
+        });
+    }
+
     public event Action<TunnelIdentifier, GenericProxyBase>? OnRealServerConnected;
     public event Action<TunnelIdentifier, GenericProxyBase>? OnRealServerDisconnected;
 
@@ -105,9 +106,9 @@ public abstract class GenericProxyBase : IDisposable
 
         ResetChannels();
 
-        Hive.Common.Shared.Helpers.TaskHelper.FireAndForget(() => OuterSendLoopAsync(CancellationToken));
-        Hive.Common.Shared.Helpers.TaskHelper.FireAndForget(() => InnerSendLoopAsync(CancellationToken));
-        Hive.Common.Shared.Helpers.TaskHelper.FireAndForget(() => InnerReceiveLoopAsync(CancellationToken));
+        TaskHelper.FireAndForget(() => OuterSendLoopAsync(CancellationToken));
+        TaskHelper.FireAndForget(() => InnerSendLoopAsync(CancellationToken));
+        TaskHelper.FireAndForget(() => InnerReceiveLoopAsync(CancellationToken));
 
         Logger.LogProxyStarted(GetProxyInfoForLog());
     }
@@ -123,45 +124,43 @@ public abstract class GenericProxyBase : IDisposable
             var writer = OutwardBuffersQueue.Writer;
 
             while (await reader.WaitToReadAsync(cancellationToken))
+            while (reader.TryRead(out var packetCarrier))
             {
-                while (reader.TryRead(out var packetCarrier))
+                if (Environment.TickCount - packetCarrier.LastTryTime < RetryInterval)
                 {
-                    if (Environment.TickCount - packetCarrier.LastTryTime < RetryInterval)
-                    {
-                        await writer.WriteAsync(packetCarrier, cancellationToken);
-                        continue;
-                    }
-
-                    var sent = false;
-
-                    packetCarrier.LastTryTime = Environment.TickCount;
-
-                    foreach (var sender in OutwardSenders)
-                    {
-                        if (!sender(packetCarrier)) continue;
-                        sent = true;
-                        break;
-                    }
-
-                    if (sent)
-                    {
-                        packetCarrier.Dispose();
-                        continue;
-                    }
-
-                    // If all return false, it means that it has not been sent.
-                    // If buffer.TryCount greater tha const value TryTime, drop it.
-                    packetCarrier.TryCount++;
-
-                    if (packetCarrier.TryCount > TryTime)
-                    {
-                        packetCarrier.Dispose();
-                        continue;
-                    }
-
-                    // Re-enqueue.
                     await writer.WriteAsync(packetCarrier, cancellationToken);
+                    continue;
                 }
+
+                var sent = false;
+
+                packetCarrier.LastTryTime = Environment.TickCount;
+
+                foreach (var sender in OutwardSenders)
+                {
+                    if (!sender(packetCarrier)) continue;
+                    sent = true;
+                    break;
+                }
+
+                if (sent)
+                {
+                    packetCarrier.Dispose();
+                    continue;
+                }
+
+                // If all return false, it means that it has not been sent.
+                // If buffer.TryCount greater tha const value TryTime, drop it.
+                packetCarrier.TryCount++;
+
+                if (packetCarrier.TryCount > TryTime)
+                {
+                    packetCarrier.Dispose();
+                    continue;
+                }
+
+                // Re-enqueue.
+                await writer.WriteAsync(packetCarrier, cancellationToken);
             }
 
             break;
@@ -177,14 +176,13 @@ public abstract class GenericProxyBase : IDisposable
         Logger.LogReceivedPacket(GetProxyInfoForLog(), message.Payload.Length, RemoteClientPort);
 
         if (InwardBuffersQueue == null)
-        {
             // If the queue is null, it means that the proxy has been disposed.
             return;
-        }
 
         if (InwardBuffersQueue.Writer.TryWrite(message)) return;
 
-        Logger.LogFailedToSendMcPacketCarrier(GetProxyInfoForLog(), message.SelfRealPort, message.TargetRealPort, message.LastTryTime);
+        Logger.LogFailedToSendMcPacketCarrier(GetProxyInfoForLog(), message.SelfRealPort, message.TargetRealPort,
+            message.LastTryTime);
     }
 
     protected virtual object GetProxyInfoForLog()
@@ -390,7 +388,8 @@ internal static partial class GenericProxyBaseLoggers
     [LoggerMessage(LogLevel.Warning, "[{ProxyInfo}] Proxy dispose throws an exception")]
     public static partial void LogProxyDisposeEx(this ILogger logger, Exception ex, object proxyInfo);
 
-    [LoggerMessage(LogLevel.Warning, "[{ProxyInfo}] Failed to send McPacketCarrier, self port [{selfRealPort}], target port [{targetRealPort}], last try time: {LastTryTime}, maybe is because proxy is disposed.")]
+    [LoggerMessage(LogLevel.Warning,
+        "[{ProxyInfo}] Failed to send McPacketCarrier, self port [{selfRealPort}], target port [{targetRealPort}], last try time: {LastTryTime}, maybe is because proxy is disposed.")]
     public static partial void LogFailedToSendMcPacketCarrier(
         this ILogger logger,
         object proxyInfo,

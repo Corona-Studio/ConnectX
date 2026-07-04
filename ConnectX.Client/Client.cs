@@ -25,11 +25,11 @@ public class Client
 {
     private readonly IDispatcher _dispatcher;
     private readonly ILogger _logger;
-
-    private readonly Router _router;
     private readonly PartnerManager _partnerManager;
     private readonly ProxyManager _proxyManager;
     private readonly IRoomInfoManager _roomInfoManager;
+
+    private readonly Router _router;
     private readonly IServerLinkHolder _serverLinkHolder;
     private readonly IZeroTierNodeLinkHolder _zeroTierNodeLinkHolder;
     private bool _isInGroup;
@@ -97,10 +97,7 @@ public class Client
         _isInGroup = false;
 
         // Clear and reset all manager
-        if (OperatingSystem.IsWindows())
-        {
-            await _zeroTierNodeLinkHolder.LeaveNetworkAsync(ct);
-        }
+        if (OperatingSystem.IsWindows()) await _zeroTierNodeLinkHolder.LeaveNetworkAsync(ct);
 
         _router.RemoveAllPeers();
         _roomInfoManager.ClearRoomInfo();
@@ -278,12 +275,10 @@ public class Client
     public PartnerConnectionState GetPartnerConState(Guid partnerId)
     {
         if (_partnerManager.Partners.TryGetValue(partnerId, out var partner))
-        {
             return new PartnerConnectionState(
                 partner.Connection.IsConnected,
                 false,
                 partner.Latency);
-        }
 
         var forwardInterface = _router.RouteTable.GetForwardInterface(partnerId);
 
