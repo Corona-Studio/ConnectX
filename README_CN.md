@@ -31,8 +31,12 @@
 | `服务端`: 中继服务器管理                             | :white_check_mark: |
 | `中继`: 通过 Hive 实现的中继服务器                   | :white_check_mark: |
 | `客户端`: 基于 ZT 的 P2P 联机实现                    | :white_check_mark: |
-| `客户端`: 基于 ZT 的中继联机实现                     | :white_check_mark: |
 | `客户端`: 基于 ConnectX 中继服务器的联机实现         | :white_check_mark: |
+
+## 客户端项目
+
+- `ConnectX.Client.Relay` 是可独立使用的服务端中继客户端，不包含任何 ZeroTier 依赖。
+- `ConnectX.Client.ZeroTier` 是可选的 P2P/直连实现。它复用中继客户端的公共逻辑，并且是唯一引用 `ZeroTier.Sockets` 的客户端项目。
 
 ## 如何部署？
 
@@ -68,8 +72,7 @@ private static IClientSettingProvider GetConnectXSettings()
     return new DefaultClientSettingProvider
     {
         ServerAddress = serverIp,
-        ServerPort = ConnectXServerPort,
-        JoinP2PNetwork = true
+        ServerPort = ConnectXServerPort
     };
 }
 ```
@@ -80,10 +83,12 @@ private static IClientSettingProvider GetConnectXSettings()
 private static void ConfigureServices(IServiceCollection services)
 {
     // ...
-+   services.UseConnectX(GetConnectXSettings);
++   services.UseConnectXRelay(_ => GetConnectXSettings());
     // ...
 }
 ```
+
+确实需要直连功能的应用应引用 `ConnectX.Client.ZeroTier`，并改用 `UseConnectXZeroTier`。
 
 ## 如何使用？
 

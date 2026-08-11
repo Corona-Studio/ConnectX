@@ -21,8 +21,7 @@ internal static class Program
         return new DefaultClientSettingProvider
         {
             ServerAddress = IPAddress.Parse(listenAddressStr),
-            ServerPort = port,
-            JoinP2PNetwork = true
+            ServerPort = port
         };
     }
 
@@ -36,7 +35,7 @@ internal static class Program
         builder.ConfigureServices((ctx, services) =>
         {
             services.AddHostedService<ConsoleService>();
-            services.UseConnectX(_ => GetSettings(ctx.Configuration));
+            services.UseConnectXZeroTier(_ => GetSettings(ctx.Configuration));
         });
 
         var app = builder.Build();

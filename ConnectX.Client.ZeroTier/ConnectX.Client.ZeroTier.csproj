@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>ConnectX.Client.ZeroTier</AssemblyName>
+    <RootNamespace>ConnectX.Client</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ZeroTier.Sockets" Version="1.8.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ConnectX.Client.Relay\ConnectX.Client.Relay.csproj" />
+    <ProjectReference Include="..\ConnectX.MessageRegister.SourceGenerator\ConnectX.MessageRegister.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/Corona-Studio/ConnectX</PackageProjectUrl>
+    <Title>$(AssemblyName)</Title>
+  </PropertyGroup>
+
+</Project>

@@ -32,9 +32,13 @@ Proudly powered by another of our open-source projects: [Hive.Framework](https:/
 | `Relay`: Relay Server impl based on Hive  | :white_check_mark: |
 | `Relay`: Ultra low latency relay impl     | :white_check_mark: |
 | `Client`: ZT based P2P connection         | :white_check_mark: |
-| `Client`: ZT based Relay connection       | :white_check_mark: |
 | `Client`: ConnectX based Relay connection | :white_check_mark: |
 | Dual Stack Socket Support                 | :white_check_mark: |
+
+## Client projects
+
+- `ConnectX.Client.Relay` is the standalone server-relay client and has no ZeroTier dependency.
+- `ConnectX.Client.ZeroTier` is the optional direct/P2P implementation. It references the relay client for shared client behavior and is the only client project that references `ZeroTier.Sockets`.
 
 ## Quick Start!
 
@@ -66,8 +70,7 @@ private static IClientSettingProvider GetConnectXSettings()
     return new DefaultClientSettingProvider
     {
         ServerAddress = serverIp,
-        ServerPort = ConnectXServerPort,
-        JoinP2PNetwork = true
+        ServerPort = ConnectXServerPort
     };
 }
 ```
@@ -78,10 +81,13 @@ Then, just add one more line to complete the setup!
 private static void ConfigureServices(IServiceCollection services)
 {
     // ...
-+   services.UseConnectX(GetConnectXSettings);
++   services.UseConnectXRelay(_ => GetConnectXSettings());
     // ...
 }
 ```
+
+Applications that intentionally support direct connections should reference
+`ConnectX.Client.ZeroTier` and call `UseConnectXZeroTier` instead.
 
 ## How to use?
 

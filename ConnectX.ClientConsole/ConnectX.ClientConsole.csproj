@@ -27,7 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ConnectX.Client\ConnectX.Client.csproj" />
+    <ProjectReference Include="..\ConnectX.Client.ZeroTier\ConnectX.Client.ZeroTier.csproj" />
   </ItemGroup>
 
 </Project>

@@ -173,7 +173,9 @@ public class Server : BackgroundService
         if (!_tempSessionMapping.TryRemove(session.Id, out _))
             return;
 
-        if (!CheckProtocolCompatibility(ctx.Message.LinkProtocolMajor, ctx.Message.LinkProtocolMinor))
+        if (!CheckProtocolCompatibility(ctx.Message.LinkProtocolMajor, ctx.Message.LinkProtocolMinor) ||
+            ctx.Message.JoinP2PNetwork &&
+            ctx.Message.LinkProtocolMinor < LinkProtocolConstants.MinimumDirectConnectionProtocolMinor)
         {
             var metadata = new Dictionary<string, string>(2)
             {

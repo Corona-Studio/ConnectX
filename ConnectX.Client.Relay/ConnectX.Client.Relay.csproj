@@ -1,0 +1,39 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>ConnectX.Client.Relay</AssemblyName>
+    <RootNamespace>ConnectX.Client</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.2" />
+    <PackageReference Condition="'$(Configuration)' == 'Debug'" Include="ConsoleTables" Version="2.7.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.10" />
+    <PackageReference Include="Snappier" Version="1.3.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ConnectX.MessageRegister.SourceGenerator\ConnectX.MessageRegister.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\ConnectX.Shared\ConnectX.Shared.csproj" />
+    <ProjectReference Include="..\Hive.Framework\Hive.Both.General\Hive.Both.General.csproj" />
+    <ProjectReference Include="..\Hive.Framework\Hive.Codec.MemoryPack\Hive.Codec.MemoryPack.csproj" />
+    <ProjectReference Include="..\Hive.Framework\Hive.Codec.Shared\Hive.Codec.Shared.csproj" />
+    <ProjectReference Include="..\Hive.Framework\Hive.Network.Abstractions\Hive.Network.Abstractions.csproj" />
+    <ProjectReference Include="..\Hive.Framework\Hive.Network.Shared\Hive.Network.Shared.csproj" />
+    <ProjectReference Include="..\Hive.Framework\Hive.Network.Tcp\Hive.Network.Tcp.csproj" />
+    <ProjectReference Include="..\Hive.Framework\Hive.Network.Udp\Hive.Network.Udp.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/Corona-Studio/ConnectX</PackageProjectUrl>
+    <Title>$(AssemblyName)</Title>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

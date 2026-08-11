@@ -16,7 +16,8 @@
     <Project Path="Hive.Framework/Hive.Network.Tcp/Hive.Network.Tcp.csproj" />
     <Project Path="Hive.Framework/Hive.Network.Udp/Hive.Network.Udp.csproj" />
   </Folder>
-  <Project Path="ConnectX.Client/ConnectX.Client.csproj" />
+  <Project Path="ConnectX.Client.Relay/ConnectX.Client.Relay.csproj" />
+  <Project Path="ConnectX.Client.ZeroTier/ConnectX.Client.ZeroTier.csproj" />
   <Project Path="ConnectX.ClientConsole/ConnectX.ClientConsole.csproj" />
   <Project Path="ConnectX.MessageRegister.SourceGenerator/ConnectX.MessageRegister.SourceGenerator.csproj" />
   <Project Path="ConnectX.Relay/ConnectX.Relay.csproj" />

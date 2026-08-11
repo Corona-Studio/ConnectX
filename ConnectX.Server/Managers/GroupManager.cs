@@ -561,6 +561,18 @@ public class GroupManager
         }
 
         var user = _userMapping[userId];
+
+        if (group.AssignedRelayServer == null && !user.JoinP2PNetwork)
+        {
+            var err = new GroupOpResult(
+                GroupCreationStatus.Other,
+                "This room requires a direct-network capable client.");
+            ctx.Dispatcher.SendAsync(ctx.FromSession, err).Forget();
+
+            _logger.LogDirectRoomRejectedForRelayOnlyClient(ctx.FromSession.Id, groupId);
+            return;
+        }
+
         IPEndPoint? assignedRelayServerAddress = null;
 
         // If room owner is going to use relay server, we need to force all other member to use relay server too.
@@ -960,4 +972,11 @@ internal static partial class GroupManagerLoggers
         Guid userId,
         string userName,
         IPEndPoint? address);
+
+    [LoggerMessage(LogLevel.Warning,
+        "[GROUP_MANAGER] Relay-only session [{sessionId}] tried to join direct room [{groupId}]")]
+    public static partial void LogDirectRoomRejectedForRelayOnlyClient(
+        this ILogger logger,
+        SessionId sessionId,
+        Guid groupId);
 }
