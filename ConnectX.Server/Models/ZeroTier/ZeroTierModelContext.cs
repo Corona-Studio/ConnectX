@@ -2,6 +2,7 @@
 
 namespace ConnectX.Server.Models.ZeroTier;
 
+[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata)]
 [JsonSerializable(typeof(string[]))]
 [JsonSerializable(typeof(NodeStatusModel))]
 [JsonSerializable(typeof(NetworkDetailsModel))]
