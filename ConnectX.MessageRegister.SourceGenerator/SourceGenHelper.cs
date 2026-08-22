@@ -24,7 +24,13 @@ public static class SourceGenHelper
                     QualifiedName(
                         IdentifierName("Hive"),
                         IdentifierName("Codec")),
-                    IdentifierName("Shared")))
+                    IdentifierName("Shared"))),
+            UsingDirective(
+                QualifiedName(
+                    QualifiedName(
+                        IdentifierName("System"),
+                        IdentifierName("Runtime")),
+                    IdentifierName("CompilerServices")))
         ]);
     }
 
@@ -48,6 +54,15 @@ public static class SourceGenHelper
                                 TypeArgumentList(SingletonSeparatedList<TypeSyntax>(IdentifierName(type)))))));
 
             result.Add(statement);
+
+            // Merely storing typeof(T) does not trigger MemoryPack's generated
+            // static constructor. NativeAOT can then trim its explicit
+            // IMemoryPackFormatterRegister.RegisterFormatter implementation,
+            // making runtime Type-based deserialization fail. Run the static
+            // constructor while registering each packet so the formatter is
+            // rooted and installed before the first packet arrives.
+            result.Add(ParseStatement(
+                $"RuntimeHelpers.RunClassConstructor(typeof({type}).TypeHandle);"));
         }
 
         return result;
