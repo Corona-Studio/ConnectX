@@ -1,7 +1,11 @@
 ###############################################################################
 # Set default behavior to automatically normalize line endings.
 ###############################################################################
-* text=auto
+* text=auto eol=lf
+
+# Windows command scripts require CRLF for compatibility with cmd.exe.
+*.bat text eol=crlf
+*.cmd text eol=crlf
 
 ###############################################################################
 # Set default behavior for command prompt diff.
