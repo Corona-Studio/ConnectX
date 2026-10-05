@@ -1,0 +1,12 @@
+scenario,iterations,samples,median_ns_per_operation,median_managed_bytes_per_operation
+decode.legacy.random20KiB,20000,7,1102.66,208.00
+decode.pooled.random20KiB,20000,7,669.36,0.00
+decode.legacy.repeat20KiB,20000,7,3909.62,208.00
+decode.pooled.repeat20KiB,20000,7,1364.38,0.00
+mapper.locked.Ping,20000,7,34.32,0.00
+mapper.snapshot.Ping,20000,7,28.74,0.00
+encode.legacy.Ping,20000,7,693.58,280.00
+encode.pooled.Ping,20000,7,187.63,0.00
+encode.send.dispatch.pooled.Ping,20000,7,534.42,0.00
+tcp.sequence.512B,10000,7,5820.73,0.03
+tcp.frame.512B,10000,7,3067.47,0.03
