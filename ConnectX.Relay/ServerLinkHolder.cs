@@ -1,7 +1,7 @@
-﻿using ConnectX.Relay.Helpers;
+using ConnectX.Actors;
+using ConnectX.Relay.Helpers;
 using ConnectX.Relay.Interfaces;
 using ConnectX.Shared;
-using ConnectX.Shared.Helpers;
 using ConnectX.Shared.Messages;
 using ConnectX.Shared.Messages.Identity;
 using ConnectX.Shared.Messages.Relay;
@@ -14,296 +14,148 @@ using System.Net;
 
 namespace ConnectX.Relay;
 
-public class ServerLinkHolder : BackgroundService, IServerLinkHolder
+/// <summary>Handshake I/O is supervised; callbacks and published link state belong to the control actor.</summary>
+public partial class ServerLinkHolder : BackgroundService, IServerLinkHolder
 {
+    private sealed record LinkState(ISession? Session, bool Ready);
+    private LinkState _state = new(null, false);
+    private readonly ControlPlaneActor _actor;
+    private readonly TimeProvider _clock;
     private readonly IDispatcher _dispatcher;
     private readonly IServerSettingProvider _settingProvider;
     private readonly IConnector<TcpSession> _tcpConnector;
     private readonly IHostApplicationLifetime _applicationLifetime;
     private readonly ILogger _logger;
+    private readonly SemaphoreSlim _connectGate = new(1);
+    private long _lastHeartbeat;
 
-    private DateTime _lastHeartBeatTime;
-
-    public ServerLinkHolder(
-        IDispatcher dispatcher,
-        IServerSettingProvider settingProvider,
-        IConnector<TcpSession> tcpConnector,
-        IHostApplicationLifetime applicationLifetime,
-        ILogger<ServerLinkHolder> logger)
+    public ServerLinkHolder(ControlPlaneActor actor, TimeProvider clock, IDispatcher dispatcher,
+        IServerSettingProvider settingProvider, IConnector<TcpSession> tcpConnector,
+        IHostApplicationLifetime applicationLifetime, ILogger<ServerLinkHolder> logger)
     {
+        _actor = actor;
+        _clock = clock;
         _dispatcher = dispatcher;
         _settingProvider = settingProvider;
         _tcpConnector = tcpConnector;
         _applicationLifetime = applicationLifetime;
         _logger = logger;
-
-        _dispatcher.AddHandler<HeartBeat>(OnHeartBeatReceived);
-        _dispatcher.AddHandler<ShutdownMessage>(OnShutdownMessageReceived);
+        RegisterActorHandlers(dispatcher, actor);
     }
 
-    public ISession? ServerSession { get; private set; }
-    public bool IsConnected { get; private set; }
-    public bool IsSignedIn { get; private set; }
-
-    public override async Task StartAsync(CancellationToken cancellationToken)
-    {
-        _logger.LogStartingServerLinkHolder();
-
-        await ConnectAsync(cancellationToken);
-        await TaskHelper.WaitUntilAsync(() => IsConnected, cancellationToken);
-        await base.StartAsync(cancellationToken);
-    }
-
-    public override Task StopAsync(CancellationToken cancellationToken)
-    {
-        _logger.LogStoppingServerLinkHolder();
-        return base.StopAsync(cancellationToken);
-    }
-
-    private IPAddress? TryGetPublicListenAddress()
-    {
-        if (_settingProvider.PublicListenAddress != null)
-            return _settingProvider.PublicListenAddress;
-
-        var serverAddress = _settingProvider.RelayServerAddress.Equals(IPAddress.Any)
-            ? AddressHelper.GetServerPublicAddress().FirstOrDefault()
-            : _settingProvider.RelayServerAddress;
-
-        if (serverAddress != null) return serverAddress;
-
-        _logger.FailedToAcquirePublicAddress();
-
-        return null;
-    }
+    public ISession? ServerSession => Volatile.Read(ref _state).Session;
+    public bool IsConnected => Volatile.Read(ref _state).Ready;
+    public bool IsSignedIn => Volatile.Read(ref _state).Ready;
 
     public async Task ConnectAsync(CancellationToken cancellationToken)
     {
-        _logger.LogConnectingToServer();
-
-        var endPoint = new IPEndPoint(_settingProvider.ServerAddress, _settingProvider.ServerPort);
-        var session = await _tcpConnector.ConnectAsync(endPoint, cancellationToken);
-
-        if (session == null)
+        await _connectGate.WaitAsync(cancellationToken);
+        ISession? session = null;
+        try
         {
-            _logger.LogFailedToConnectToServer(endPoint);
-            _applicationLifetime.StopApplication();
-            return;
+            if (IsConnected) return;
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(20));
+            session = await _tcpConnector.ConnectAsync(_settingProvider.EndPoint, timeout.Token)
+                ?? throw new IOException("Cannot connect to the main server.");
+            session.BindTo(_dispatcher);
+            await _actor.InvokeAsync(() =>
+            {
+                Volatile.Write(ref _state, new LinkState(session, false));
+                _lastHeartbeat = _clock.GetTimestamp();
+                _actor.ObserveSession(session);
+            }, timeout.Token);
+            var result = await _dispatcher.SendAndListenOnce<SigninMessage, SigninResult>(session,
+                new SigninMessage
+                {
+                    JoinP2PNetwork = false,
+                    DisplayName = session.LocalEndPoint?.ToString() ?? "Relay",
+                    LinkProtocolMajor = LinkProtocolConstants.ProtocolMajor,
+                    LinkProtocolMinor = LinkProtocolConstants.ProtocolMinor
+                }, timeout.Token);
+            if (result is not { Succeeded: true }) throw new IOException("Main server rejected relay sign-in.");
+            var address = _settingProvider.PublicListenAddress ??
+                (_settingProvider.RelayServerAddress.Equals(IPAddress.Any)
+                    ? AddressHelper.GetServerPublicAddress().FirstOrDefault() : _settingProvider.RelayServerAddress)
+                ?? throw new IOException("Relay public address is unavailable.");
+            var port = _settingProvider.PublicListenPort != 0
+                ? _settingProvider.PublicListenPort : _settingProvider.RelayServerPort;
+            var registration = await _dispatcher.SendAndListenOnce<RegisterRelayServerMessage, RelayServerRegisteredMessage>(
+                session, new RegisterRelayServerMessage(_settingProvider.ServerId, new IPEndPoint(address, port)), timeout.Token);
+            if (registration == null) throw new IOException("Main server did not register the relay.");
+            await _actor.InvokeAsync(() =>
+            {
+                if (!ReferenceEquals(ServerSession, session)) throw new IOException("Relay connection was superseded.");
+                _lastHeartbeat = _clock.GetTimestamp();
+                Volatile.Write(ref _state, new LinkState(session, true));
+            }, timeout.Token);
         }
-
-        session.BindTo(_dispatcher);
-        session.StartAsync(cancellationToken).Forget();
-
-        _logger.LogSendingSigninMessageToServer();
-
-        await Task.Delay(1000, cancellationToken);
-
-        var signin = new SigninMessage
+        catch
         {
-            JoinP2PNetwork = _settingProvider.JoinP2PNetwork,
-            DisplayName = session.RemoteEndPoint?.ToString() ?? Guid.CreateVersion7().ToString("N"),
-            LinkProtocolMajor = LinkProtocolConstants.ProtocolMajor,
-            LinkProtocolMinor = LinkProtocolConstants.ProtocolMinor
-        };
-
-        var result = await _dispatcher.SendAndListenOnce<SigninMessage, SigninResult>(session, signin, cancellationToken);
-
-        if (result == null)
-        {
-            _logger.LogWaitForSigninResultFailed(endPoint);
-            return;
+            await _actor.InvokeAsync(() =>
+            {
+                if (session != null) _actor.Close(session);
+                if (ReferenceEquals(ServerSession, session)) Volatile.Write(ref _state, new LinkState(null, false));
+            });
+            throw;
         }
-
-        if (!result.Succeeded)
-        {
-            _logger.LogServerRefusedClientToLogin(endPoint, result);
-            return;
-        }
-
-        IsSignedIn = result.Succeeded;
-
-        _logger.LogConnectedAndSignedToServer(endPoint);
-
-        var serverAddress = TryGetPublicListenAddress();
-        var serverPort = _settingProvider.RelayServerPort == 0
-            ? _settingProvider.PublicListenPort
-            : _settingProvider.RelayServerPort;
-
-        if (serverAddress == null) return;
-
-        var serverEndPoint = new IPEndPoint(serverAddress, serverPort);
-
-        _logger.LogServerPublicAddressAcquired(serverEndPoint);
-
-        var res = await _dispatcher.SendAndListenOnce<RegisterRelayServerMessage, RelayServerRegisteredMessage>(
-            session,
-            new RegisterRelayServerMessage(
-                _settingProvider.ServerId,
-                serverEndPoint),
-            cancellationToken);
-
-        if (res == null)
-        {
-            _logger.LogFailedToRegisterRelayServer();
-            return;
-        }
-
-        _logger.LogSuccessfullyRegisteredRelayServer();
-
-        ServerSession = session;
-        IsConnected = true;
-
-        Hive.Common.Shared.Helpers.TaskHelper.FireAndForget(() => CheckServerLivenessAsync(cancellationToken));
+        finally { _connectGate.Release(); }
     }
 
-    public async Task DisconnectAsync(CancellationToken cancellationToken)
+    public Task DisconnectAsync(CancellationToken cancellationToken) => _actor.InvokeAsync(Disconnect, cancellationToken);
+
+    private void Disconnect()
     {
-        if (!IsConnected || ServerSession == null) return;
-
-        _logger.LogDisconnectingFromServer();
-
-        await _dispatcher.SendAsync(ServerSession, new ShutdownMessage(), CancellationToken.None);
-        ServerSession.Close();
-
-        _logger.LogDisconnectedFromServer();
-
-        IsSignedIn = false;
-        IsConnected = false;
+        var session = ServerSession;
+        Volatile.Write(ref _state, new LinkState(null, false));
+        if (session != null) _actor.Close(session);
     }
 
+    [ActorMessage]
     private void OnHeartBeatReceived(MessageContext<HeartBeat> ctx)
     {
-        _lastHeartBeatTime = DateTime.UtcNow;
-        _logger.LogHeartbeatReceivedFromServer();
+        if (ReferenceEquals(ctx.FromSession, ServerSession)) _lastHeartbeat = _clock.GetTimestamp();
     }
 
+    [ActorMessage]
     private void OnShutdownMessageReceived(MessageContext<ShutdownMessage> ctx)
     {
-        _logger.LogShutdownMessageReceivedFromServer();
-        DisconnectAsync(CancellationToken.None).Forget();
+        if (!ReferenceEquals(ctx.FromSession, ServerSession)) return;
+        Disconnect();
+        _applicationLifetime.StopApplication();
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogStartSendingHeartbeat();
-
-        await TaskHelper.WaitUntilAsync(() => IsConnected, stoppingToken);
-
-        while (!stoppingToken.IsCancellationRequested && IsConnected && ServerSession != null)
-        {
-            await _dispatcher.SendAsync(ServerSession, new HeartBeat(), stoppingToken);
-            await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
-        }
-
-        _logger.LogStopSendingHeartbeat();
-    }
-
-    private async Task CheckServerLivenessAsync(CancellationToken cancellationToken)
-    {
-        var endPoint = new IPEndPoint(_settingProvider.ServerAddress, _settingProvider.ServerPort);
-
         try
         {
-            _logger.LogMainServerLivenessProbeStarted(endPoint);
-
-            // Set the last for init
-            _lastHeartBeatTime = DateTime.UtcNow;
-
-            while (cancellationToken is { IsCancellationRequested: false } &&
-                   IsConnected &&
-                   ServerSession != null)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
-
-                var lastReceiveTimeSeconds = (DateTime.UtcNow - _lastHeartBeatTime).TotalSeconds;
-
-                if (lastReceiveTimeSeconds <= 15)
-                    continue;
-
-                _logger.LogMainServerHeartbeatTimeout(endPoint, lastReceiveTimeSeconds);
-
-                break;
-            }
+            await ConnectAsync(stoppingToken);
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5), _clock);
+            while (await timer.WaitForNextTickAsync(stoppingToken))
+                await _actor.InvokeAsync(() =>
+                {
+                    var session = ServerSession;
+                    if (session == null || !SessionHealth.IsConnected(session) ||
+                        _clock.GetElapsedTime(_lastHeartbeat) > TimeSpan.FromSeconds(15))
+                    {
+                        Disconnect();
+                        _applicationLifetime.StopApplication();
+                        return;
+                    }
+                    _actor.Send(_dispatcher, session, new HeartBeat());
+                }, stoppingToken);
         }
-        catch (TaskCanceledException)
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
+        catch (Exception exception)
         {
-            // ignored
-        }
-        finally
-        {
-            IsConnected = false;
-            ServerSession?.Close();
-            ServerSession = null;
-
+            _logger.LogError(exception, "Relay main-server link failed");
             _applicationLifetime.StopApplication();
         }
     }
-}
 
-internal static partial class ServerLinkHolderLoggers
-{
-    [LoggerMessage(LogLevel.Information, "[CLIENT] Successfully logged into server, assigned id: {id}")]
-    public static partial void LogSuccessfullyLoggedIn(this ILogger logger, Guid id);
-
-    [LoggerMessage(LogLevel.Information, "[CLIENT] Starting server link holder...")]
-    public static partial void LogStartingServerLinkHolder(this ILogger logger);
-
-    [LoggerMessage(LogLevel.Information, "[CLIENT] Stopping server link holder...")]
-    public static partial void LogStoppingServerLinkHolder(this ILogger logger);
-
-    [LoggerMessage(LogLevel.Information, "[CLIENT] Connecting to server...")]
-    public static partial void LogConnectingToServer(this ILogger logger);
-
-    [LoggerMessage(LogLevel.Error, "[CLIENT] Failed to connect to server at endpoint {endPoint}")]
-    public static partial void LogFailedToConnectToServer(this ILogger logger, IPEndPoint endPoint);
-
-    [LoggerMessage(LogLevel.Information, "[CLIENT] Sending signin message to server...")]
-    public static partial void LogSendingSigninMessageToServer(this ILogger logger);
-
-    [LoggerMessage(LogLevel.Information, "[CLIENT] Connected and signed to server at endpoint {endPoint}")]
-    public static partial void LogConnectedAndSignedToServer(this ILogger logger, IPEndPoint endPoint);
-
-    [LoggerMessage(LogLevel.Information, "[CLIENT] Disconnecting from server...")]
-    public static partial void LogDisconnectingFromServer(this ILogger logger);
-
-    [LoggerMessage(LogLevel.Information, "[CLIENT] Disconnected from server.")]
-    public static partial void LogDisconnectedFromServer(this ILogger logger);
-
-    [LoggerMessage(LogLevel.Debug, "[CLIENT] Heartbeat received from server.")]
-    public static partial void LogHeartbeatReceivedFromServer(this ILogger logger);
-
-    [LoggerMessage(LogLevel.Information, "[CLIENT] Shutdown message received from server.")]
-    public static partial void LogShutdownMessageReceivedFromServer(this ILogger logger);
-
-    [LoggerMessage(LogLevel.Information, "[CLIENT] Start sending heartbeat...")]
-    public static partial void LogStartSendingHeartbeat(this ILogger logger);
-
-    [LoggerMessage(LogLevel.Information, "[CLIENT] Stop sending heartbeat.")]
-    public static partial void LogStopSendingHeartbeat(this ILogger logger);
-
-    [LoggerMessage(LogLevel.Critical, "[CLIENT] Failed to register relay server.")]
-    public static partial void LogFailedToRegisterRelayServer(this ILogger logger);
-
-    [LoggerMessage(LogLevel.Information, "[CLIENT] Successfully registered relay server.")]
-    public static partial void LogSuccessfullyRegisteredRelayServer(this ILogger logger);
-
-    [LoggerMessage(LogLevel.Error, "[CLIENT] Failed to acquire public address.")]
-    public static partial void FailedToAcquirePublicAddress(this ILogger logger);
-
-    [LoggerMessage(LogLevel.Information, "[CLIENT] Server public address acquired [{endPoint}]")]
-    public static partial void LogServerPublicAddressAcquired(this ILogger logger, IPEndPoint endPoint);
-
-    [LoggerMessage(LogLevel.Information, "[CLIENT] Server liveness probe started for [{relayEndPoint}]")]
-    public static partial void LogMainServerLivenessProbeStarted(this ILogger logger, IPEndPoint relayEndPoint);
-
-    [LoggerMessage(LogLevel.Warning, "[CLIENT] Server liveness probe stopped for [{relayEndPoint}]")]
-    public static partial void LogMainServerLivenessProbeStopped(this ILogger logger, IPEndPoint relayEndPoint);
-
-    [LoggerMessage(LogLevel.Critical, "[CLIENT] Link with server [{relayEndPoint}] is down, last heartbeat received [{seconds} seconds ago]")]
-    public static partial void LogMainServerHeartbeatTimeout(this ILogger logger, IPEndPoint relayEndPoint, double seconds);
-
-    [LoggerMessage(LogLevel.Information, "[CLIENT] Wait for signin result failed at endpoint {endPoint}")]
-    public static partial void LogWaitForSigninResultFailed(this ILogger logger, IPEndPoint endPoint);
-
-    [LoggerMessage(LogLevel.Information, "[CLIENT] Server refused client to login at endpoint {endPoint}, {signinResult}")]
-    public static partial void LogServerRefusedClientToLogin(this ILogger logger, IPEndPoint endPoint, SigninResult signinResult);
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        await base.StopAsync(cancellationToken);
+        await DisconnectAsync(cancellationToken);
+    }
 }

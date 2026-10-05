@@ -1,28 +1,13 @@
-﻿using Hive.Network.Abstractions.Session;
+using Hive.Network.Abstractions.Session;
 
 namespace ConnectX.Relay;
 
-public class WatchDog(ISession session)
+/// <summary>Monotonic liveness clock, read and updated only by the control actor.</summary>
+public sealed class WatchDog(ISession session, TimeProvider timeProvider)
 {
-    /// <summary>
-    ///     Max heartbeat interval in seconds.
-    /// </summary>
     public const int MaxHeartbeatInterval = 15;
-
-    /// <summary>
-    ///     Last heartbeat time.
-    /// </summary>
-    public DateTime LastHeartbeat { get; private set; } = DateTime.UtcNow;
-
-    public ISession Session { get; init; } = session;
-
-    public void Received()
-    {
-        LastHeartbeat = DateTime.UtcNow;
-    }
-
-    public bool IsTimeoutExceeded()
-    {
-        return (DateTime.UtcNow - LastHeartbeat).TotalSeconds > MaxHeartbeatInterval;
-    }
+    private long _lastHeartbeat = timeProvider.GetTimestamp();
+    public ISession Session { get; } = session;
+    public void Received() => _lastHeartbeat = timeProvider.GetTimestamp();
+    public bool IsTimeoutExceeded() => timeProvider.GetElapsedTime(_lastHeartbeat) > TimeSpan.FromSeconds(MaxHeartbeatInterval);
 }

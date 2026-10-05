@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+using ConnectX.Actors;
+using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using ConnectX.Server.Managers;
 using ConnectX.Server.Models.Contexts;
@@ -11,7 +12,7 @@ using Microsoft.Extensions.Logging;
 
 namespace ConnectX.Server.Services;
 
-public class RoomJoinRecordService : BackgroundService
+public partial class RoomJoinRecordService : BackgroundService
 {
     private record FetchedRoomInfo(Guid UserId, Guid RoomId, UpdateRoomMemberNetworkInfo Info);
 
@@ -23,21 +24,26 @@ public class RoomJoinRecordService : BackgroundService
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly ILogger<RoomJoinRecordService> _logger;
 
+    private readonly ControlPlaneActor _actor;
+
     public RoomJoinRecordService(
+        ControlPlaneActor actor,
         GroupManager groupManager,
         PeerInfoService peerInfoService,
         IDispatcher dispatcher,
         IServiceScopeFactory serviceScopeFactory,
         ILogger<RoomJoinRecordService> logger)
     {
+        _actor = actor;
         _groupManager = groupManager;
         _peerInfoService = peerInfoService;
         _serviceScopeFactory = serviceScopeFactory;
         _logger = logger;
 
-        dispatcher.AddHandler<UpdateRoomMemberNetworkInfo>(OnReceivedRoomInfoUpdate);
+        RegisterActorHandlers(dispatcher, actor);
     }
 
+    [ActorMessage]
     private void OnReceivedRoomInfoUpdate(MessageContext<UpdateRoomMemberNetworkInfo> ctx)
     {
         if (string.IsNullOrEmpty(ctx.Message.NetworkNodeId)) return;
@@ -91,7 +97,8 @@ public class RoomJoinRecordService : BackgroundService
                 continue;
             }
 
-            if (!groupManager.TryGetGroup(update.RoomId, out var group))
+            var group = await _actor.AskAsync(() => groupManager.GetGroupSnapshot(update.RoomId), stoppingToken);
+            if (group == null)
             {
                 _logger.LogFailedToGetGroup(update.RoomId);
                 continue;

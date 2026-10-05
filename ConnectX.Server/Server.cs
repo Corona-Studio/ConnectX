@@ -1,26 +1,21 @@
-﻿using System.Collections.Concurrent;
+using ConnectX.Actors;
 using System.Net;
 using ConnectX.Server.Interfaces;
 using ConnectX.Server.Managers;
 using ConnectX.Server.Messages;
 using ConnectX.Shared;
-using ConnectX.Shared.Helpers;
 using ConnectX.Shared.Messages;
 using ConnectX.Shared.Messages.Identity;
 using ConnectX.Shared.Messages.Server;
 using Hive.Both.General.Dispatchers;
 using Hive.Network.Abstractions;
 using Hive.Network.Abstractions.Session;
-using Hive.Network.Tcp;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace ConnectX.Server;
 
-public class Server : BackgroundService
+public partial class Server : ActorTcpListener
 {
-    private const int MaxSessionLoginTimeout = 600;
-    private readonly IAcceptor<TcpSession> _acceptor;
 
     private readonly GroupManager _groupManager;
     private readonly ClientManager _clientManager;
@@ -30,18 +25,15 @@ public class Server : BackgroundService
     private readonly InterconnectServerManager _interconnectServerManager;
 
     private readonly IDispatcher _dispatcher;
-    private readonly IHostApplicationLifetime _lifetime;
     private readonly ILogger _logger;
-    private readonly IServerSettingProvider _serverSettingProvider;
 
-    private readonly ConcurrentDictionary<SessionId, (DateTime AddTime, ISession Session)>
-        _tempSessionMapping = new();
-
-    private long _currentSessionCount;
+    private readonly ControlPlaneActor _actor;
 
     public Server(
+        ControlPlaneActor actor,
+        TimeProvider timeProvider,
         IDispatcher dispatcher,
-        IAcceptor<TcpSession> acceptor,
+        ILoggerFactory loggerFactory,
         IServerSettingProvider serverSettingProvider,
         GroupManager groupManager,
         ClientManager clientManager,
@@ -49,12 +41,11 @@ public class Server : BackgroundService
         P2PManager p2pManager,
         RelayServerManager relayServerManager,
         InterconnectServerManager interconnectServerManager,
-        IHostApplicationLifetime lifetime,
         ILogger<Server> logger)
+        : base(actor, dispatcher, serverSettingProvider.ListenIpEndPoint, logger, loggerFactory, timeProvider)
     {
+        _actor = actor;
         _dispatcher = dispatcher;
-        _acceptor = acceptor;
-        _serverSettingProvider = serverSettingProvider;
 
         _groupManager = groupManager;
         _clientManager = clientManager;
@@ -62,93 +53,30 @@ public class Server : BackgroundService
         _relayServerManager = relayServerManager;
         _interconnectServerManager = interconnectServerManager;
 
-        _lifetime = lifetime;
         _logger = logger;
 
-        _clientManager.OnSessionDisconnected += ClientManagerOnSessionDisconnected;
-
-        _acceptor.BindTo(_dispatcher);
-
-        _dispatcher.AddHandler<SigninMessage>(OnSigninMessageReceived);
-        _dispatcher.AddHandler<InterconnectServerRegistration>(OnInterconnectServerRegistrationReceived);
+        RegisterActorHandlers(dispatcher, actor);
     }
 
-    private void ClientManagerOnSessionDisconnected(SessionId sessionId)
-    {
-        var newVal = Interlocked.Decrement(ref _currentSessionCount);
-        _logger.LogCurrentOnline(newVal);
-    }
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        _logger.LogStartingServer();
-
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            foreach (var (id, (add, session)) in _tempSessionMapping)
-            {
-                var currentTime = DateTime.UtcNow;
-                if (!((currentTime - add).TotalSeconds > MaxSessionLoginTimeout)) continue;
-
-                _logger.LogSessionLoginTimeout(session.Id);
-                _logger.LogCurrentOnline(Interlocked.Read(ref _currentSessionCount));
-
-                await _dispatcher.SendAsync(session, new ShutdownMessage(), stoppingToken);
-                _tempSessionMapping.TryRemove(id, out _);
-            }
-
-            await Task.Delay(1000, stoppingToken);
-        }
-    }
-
-    public override async Task StartAsync(CancellationToken cancellationToken)
-    {
-        await _acceptor.SetupAsync(_serverSettingProvider.ListenIpEndPoint, cancellationToken);
-
-        Hive.Common.Shared.Helpers.TaskHelper.FireAndForget(() => _acceptor.StartAcceptLoop(cancellationToken));
-        _acceptor.OnSessionCreated += AcceptorOnOnSessionCreated;
-
-        _logger.LogServerStarted(_serverSettingProvider.ListenIpEndPoint);
-
-        await base.StartAsync(cancellationToken);
-    }
-
-    private void AcceptorOnOnSessionCreated(IAcceptor acceptor, SessionId id, TcpSession session)
-    {
-        var currentTime = DateTime.UtcNow;
-
-        session.StartAsync(_lifetime.ApplicationStopping).Forget();
-
-        _tempSessionMapping.AddOrUpdate(
-            id,
-            _ => (currentTime, session),
-            (_, old) =>
-            {
-                old.Session.Close();
-                return (currentTime, session);
-            });
-
-        _logger.LogNewSessionJoined(session.RemoteEndPoint!, id);
-    }
-
+    [ActorMessage]
     private void OnInterconnectServerRegistrationReceived(MessageContext<InterconnectServerRegistration> ctx)
     {
         var session = ctx.FromSession;
 
-        // Remove temp session mapping
-        if (!_tempSessionMapping.TryRemove(session.Id, out _))
+        // Only the accepted connection can complete admission once.
+        if (!TryPromote(session))
             return;
 
-        var newVal = Interlocked.Increment(ref _currentSessionCount);
-
-        _logger.LogCurrentOnline(newVal);
         _logger.LogSigninMessageReceived(session.RemoteEndPoint!, session.Id);
 
         _clientManager.AttachSession(session.Id, session);
 
-        _dispatcher.SendAsync(session, new InterconnectServerRegistrationSucceeded()).Forget();
-
-        _interconnectServerManager.AttachSession(session.Id, session, ctx.Message);
+        if (_interconnectServerManager.AttachSession(session.Id, session, ctx.Message) == default)
+        {
+            _clientManager.DetachSession(session.Id);
+            return;
+        }
+        _actor.Send(_dispatcher, session, new InterconnectServerRegistrationSucceeded());
     }
 
     private static bool CheckProtocolCompatibility(
@@ -165,12 +93,13 @@ public class Server : BackgroundService
         return true;
     }
 
+    [ActorMessage]
     private void OnSigninMessageReceived(MessageContext<SigninMessage> ctx)
     {
         var session = ctx.FromSession;
 
-        // Remove temp session mapping
-        if (!_tempSessionMapping.TryRemove(session.Id, out _))
+        // Only the accepted connection can complete admission once.
+        if (!TryPromote(session))
             return;
 
         if (!CheckProtocolCompatibility(ctx.Message.LinkProtocolMajor, ctx.Message.LinkProtocolMinor) ||
@@ -188,11 +117,7 @@ public class Server : BackgroundService
                 SigninResult.ErrorProtocolMismatch,
                 metadata);
 
-            _dispatcher
-                .SendAsync(session, result)
-                .AsTask()
-                .ContinueWith(_ => session.Close())
-                .Forget();
+            _actor.SendAndClose(_dispatcher, session, result);
 
             _logger.LogSessionProtocolMismatch(
                 session.RemoteEndPoint!,
@@ -203,29 +128,18 @@ public class Server : BackgroundService
             return;
         }
 
-        var newVal = Interlocked.Increment(ref _currentSessionCount);
-        _logger.LogCurrentOnline(newVal);
-
         _logger.LogSigninMessageReceived(session.RemoteEndPoint!, session.Id);
 
-        _clientManager.AttachSession(session.Id, session);
+        if (_clientManager.AttachSession(session.Id, session) == default) { _actor.Close(session); return; }
 
         var userId = _groupManager.AttachSession(session.Id, session, ctx.Message);
 
-        _dispatcher.SendAsync(session, new SigninResult(true, userId)).Forget();
-
+        if (userId == Guid.Empty) { _clientManager.DetachSession(session.Id); return; }
         _relayServerManager.AttachSession(session.Id, userId, session);
         _p2pManager.AttachSession(session, userId, ctx.Message);
+        _actor.Send(_dispatcher, session, new SigninResult(true, userId));
     }
 
-    public override async Task StopAsync(CancellationToken cancellationToken)
-    {
-        await _acceptor.TryCloseAsync(cancellationToken);
-
-        _logger.LogServerStopped();
-
-        await base.StopAsync(cancellationToken);
-    }
 }
 
 internal static partial class ServerLoggers

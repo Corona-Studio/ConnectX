@@ -1,124 +1,104 @@
-﻿using ConnectX.Shared.Messages;
-using Hive.Network.Abstractions.Session;
+using ConnectX.Actors;
+using ConnectX.Shared.Messages;
+using Hive.Both.General.Dispatchers;
 using Hive.Network.Abstractions;
+using Hive.Network.Abstractions.Session;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using System.Collections.Concurrent;
-using ConnectX.Relay.Helpers;
 using ConnectX.Relay.Interfaces;
-using ConnectX.Shared.Helpers;
-using Hive.Both.General.Dispatchers;
 
 namespace ConnectX.Relay.Managers;
 
 public delegate void SessionDisconnectedHandler(SessionId sessionId);
 
-public class ClientManager : BackgroundService
+/// <summary>Actor-owned connection liveness. Detachment is idempotent and precedes notifications.</summary>
+public partial class ClientManager : BackgroundService
 {
-    private readonly IServerLinkHolder _serverLinkHolder;
+    private readonly ControlPlaneActor _actor;
     private readonly IDispatcher _dispatcher;
     private readonly ILogger _logger;
-    private readonly ConcurrentDictionary<SessionId, WatchDog> _watchDogMapping = new();
+    private readonly TimeProvider _timeProvider;
+    private readonly IServerLinkHolder _serverLinkHolder;
+    private readonly Dictionary<SessionId, WatchDog> _watchDogMapping = [];
 
-    public ClientManager(
-        IServerLinkHolder serverLinkHolder,
-        IDispatcher dispatcher,
-        ILogger<ClientManager> logger)
+    public ClientManager(ControlPlaneActor actor, TimeProvider timeProvider, IServerLinkHolder serverLinkHolder,
+        IDispatcher dispatcher, ILogger<ClientManager> logger)
     {
-        _serverLinkHolder = serverLinkHolder;
+        _actor = actor;
+        _timeProvider = timeProvider;
         _dispatcher = dispatcher;
         _logger = logger;
-
-        _dispatcher.AddHandler<ShutdownMessage>(OnReceivedShutdownMessage);
-        _dispatcher.AddHandler<HeartBeat>(OnReceivedHeartBeat);
+        _serverLinkHolder = serverLinkHolder;
+        RegisterActorHandlers(dispatcher, actor);
     }
 
     public event SessionDisconnectedHandler? OnSessionDisconnected;
 
-    /// <summary>
-    ///     Add the session to the session mapping.
-    /// </summary>
-    /// <param name="id"></param>
-    /// <param name="session"></param>
-    /// <returns>returns the assigned session id, if id is default(Guid), it means the process has failed</returns>
     public SessionId AttachSession(SessionId id, ISession session)
     {
-        var watchDog = new WatchDog(session);
-
-        if (!_watchDogMapping.ContainsKey(id) &&
-            !_watchDogMapping.TryAdd(id, watchDog))
-        {
-            _logger.LogFailedToAddSessionToSessionMapping(id);
-            return default;
-        }
-
+        _actor.AssertAccess();
+        if (!_watchDogMapping.TryAdd(id, new WatchDog(session, _timeProvider))) return default;
         _logger.LogSessionAttached(id);
-
         return id;
     }
 
-    private void OnReceivedShutdownMessage(MessageContext<ShutdownMessage> ctx)
+    public bool IsSessionAttached(SessionId id)
     {
-        if (!_watchDogMapping.TryRemove(ctx.FromSession.Id, out _)) return;
-
-        _logger.LogReceivedShutdownMessage(ctx.FromSession.Id);
-
-        OnSessionDisconnected?.Invoke(ctx.FromSession.Id);
+        _actor.AssertAccess();
+        return _watchDogMapping.ContainsKey(id);
     }
 
+    public void DetachSession(SessionId id)
+    {
+        _actor.AssertAccess();
+        if (!_watchDogMapping.Remove(id, out var watchdog)) return;
+        _actor.Close(watchdog.Session);
+        OnSessionDisconnected?.Invoke(id);
+    }
+
+    [ActorMessage]
+    private void OnReceivedShutdownMessage(MessageContext<ShutdownMessage> ctx)
+    {
+        if (_watchDogMapping.TryGetValue(ctx.FromSession.Id, out var watchdog) &&
+            ReferenceEquals(watchdog.Session, ctx.FromSession)) DetachSession(ctx.FromSession.Id);
+    }
+
+    [ActorMessage]
     private void OnReceivedHeartBeat(MessageContext<HeartBeat> ctx)
     {
-        if (_serverLinkHolder.ServerSession == null)
+        if (ReferenceEquals(ctx.FromSession, _serverLinkHolder.ServerSession)) return;
+        if (!_watchDogMapping.TryGetValue(ctx.FromSession.Id, out var watchdog) ||
+            !ReferenceEquals(watchdog.Session, ctx.FromSession))
         {
-            // Server session is not set, ignore the heart beat.
-            _logger.LogServerLinkDisconnectedOrNotReadyYet();
+            _actor.SendAndClose(ctx.Dispatcher, ctx.FromSession, new ShutdownMessage());
             return;
         }
-
-        if (ctx.FromSession.IsSameSession(_serverLinkHolder.ServerSession))
-        {
-            // This is the heart beat from the server, ignore it.
-            return;
-        }
-
-        if (!_watchDogMapping.TryGetValue(ctx.FromSession.Id, out var watchDog))
-        {
-            _logger.LogReceivedHeartBeatFromUnattachedSession(ctx.FromSession.Id);
-
-            ctx.Dispatcher.SendAsync(ctx.FromSession, new ShutdownMessage()).Forget();
-            ctx.Dispatcher.RemoveHandler<HeartBeat>(OnReceivedHeartBeat);
-            return;
-        }
-
-        ctx.Dispatcher.SendAsync(ctx.FromSession, new HeartBeat()).Forget();
-        watchDog.Received();
-
-        _logger.RelayHeartBeatReceived(ctx.FromSession.Id);
+        watchdog.Received();
+        _actor.Send(ctx.Dispatcher, ctx.FromSession, new HeartBeat());
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogWatchDogStarted();
-
-        while (!stoppingToken.IsCancellationRequested)
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(500), _timeProvider);
+        try
         {
-            foreach (var (id, watchDog) in _watchDogMapping)
-            {
-                if (!watchDog.IsTimeoutExceeded()) continue;
-
-                _logger.LogSessionTimeout(id);
-
-                OnSessionDisconnected?.Invoke(id);
-                _dispatcher.SendAsync(watchDog.Session, new ShutdownMessage(), CancellationToken.None).Forget();
-                watchDog.Session.Close();
-
-                _watchDogMapping.TryRemove(id, out _);
-            }
-
-            await Task.Delay(500, stoppingToken);
+            while (await timer.WaitForNextTickAsync(stoppingToken))
+                await _actor.InvokeAsync(() =>
+                {
+                    foreach (var (id, watchdog) in _watchDogMapping.ToArray())
+                        if (watchdog.IsTimeoutExceeded() || !SessionHealth.IsConnected(watchdog.Session)) DetachSession(id);
+                }, stoppingToken);
         }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
+    }
 
-        _logger.LogWatchDogStopped();
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        await base.StopAsync(cancellationToken);
+        await _actor.InvokeAsync(() =>
+        {
+            foreach (var id in _watchDogMapping.Keys.ToArray()) DetachSession(id);
+        }, cancellationToken);
     }
 }
 
@@ -149,10 +129,4 @@ internal static partial class ClientManagerLoggers
     [LoggerMessage(LogLevel.Information, "[CLIENT_MANAGER] Watchdog stopped.")]
     public static partial void LogWatchDogStopped(this ILogger logger);
 
-    [LoggerMessage(LogLevel.Debug, "[CLIENT_MANAGER] Heartbeat received from session, session id: {sessionId}")]
-    public static partial void RelayHeartBeatReceived(this ILogger logger, SessionId sessionId);
-
-    [LoggerMessage(LogLevel.Critical,
-        "[CLIENT_MANAGER] Server link is disconnected or not ready yet, ignore the heartbeat.")]
-    public static partial void LogServerLinkDisconnectedOrNotReadyYet(this ILogger logger);
 }

@@ -1,3 +1,5 @@
+using Hive.Both.General.Dispatchers;
+using ConnectX.Actors;
 using ConnectX.Server.Interfaces;
 using ConnectX.Server.Managers;
 using ConnectX.Server.Models.Contexts;
@@ -35,7 +37,11 @@ internal static class Program
             services.AddSingleton<IServerSettingProvider, ConfigSettingProvider>();
             services.AddSingleton<IInterconnectServerSettingProvider, InterconnectServerSettingProvider>();
 
+            services.AddSingleton(TimeProvider.System);
+            services.AddSingleton<ControlPlaneActor>();
+            services.AddHostedService(sp => sp.GetRequiredService<ControlPlaneActor>());
             services.AddConnectXEssentials();
+            services.AddSingleton<IDispatcher, ActorDispatcher>();
             services.RegisterConnectXServerPackets();
 
             services.AddSingleton<ClientManager>();
@@ -65,6 +71,7 @@ internal static class Program
             services.AddSingleton<RoomCreationRecordService>();
             services.AddHostedService(sc => sc.GetRequiredService<RoomCreationRecordService>());
 
+            services.AddHostedService(sc => sc.GetRequiredService<P2PManager>());
             services.AddHostedService(sc => sc.GetRequiredService<ClientManager>());
             services.AddHostedService<Server>();
         });

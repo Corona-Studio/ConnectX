@@ -1,34 +1,37 @@
-﻿using Microsoft.Extensions.Logging;
+using ConnectX.Actors;
+using Microsoft.Extensions.Logging;
 using ConnectX.Shared.Messages.Relay;
 using Hive.Both.General.Dispatchers;
 using Hive.Network.Abstractions;
 using Hive.Network.Abstractions.Session;
-using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using ConnectX.Server.Interfaces;
-using ConnectX.Shared.Helpers;
 
 namespace ConnectX.Server.Managers;
 
-public class RelayServerManager
+public partial class RelayServerManager
 {
     private readonly ClientManager _clientManager;
     private readonly IServerSettingProvider _serverSettingProvider;
     private readonly IDispatcher _dispatcher;
     private readonly ILogger _logger;
 
-    private readonly ConcurrentDictionary<SessionId, Guid> _sessionIdMapping = new();
-    private readonly ConcurrentDictionary<Guid, ISession> _sessionMapping = new();
-    private readonly ConcurrentDictionary<Guid, IPEndPoint> _serverAddressMapping = new();
-    private readonly ConcurrentDictionary<IPEndPoint, ISession> _relayAddressSessionMapping = new();
+    private readonly Dictionary<SessionId, Guid> _sessionIdMapping = new();
+    private readonly Dictionary<Guid, ISession> _sessionMapping = new();
+    private readonly Dictionary<Guid, IPEndPoint> _serverAddressMapping = new();
+    private readonly Dictionary<IPEndPoint, ISession> _relayAddressSessionMapping = new();
+
+    private readonly ControlPlaneActor _actor;
 
     public RelayServerManager(
+        ControlPlaneActor actor,
         ClientManager clientManager,
         IServerSettingProvider serverSettingProvider,
         IDispatcher dispatcher,
-        ILogger<ClientManager> logger)
+        ILogger<RelayServerManager> logger)
     {
+        _actor = actor;
         _clientManager = clientManager;
         _serverSettingProvider = serverSettingProvider;
         _dispatcher = dispatcher;
@@ -36,7 +39,7 @@ public class RelayServerManager
 
         _clientManager.OnSessionDisconnected += ClientManagerOnOnSessionDisconnected;
 
-        _dispatcher.AddHandler<RegisterRelayServerMessage>(OnReceivedRegisterRelayServerMessage);
+        RegisterActorHandlers(dispatcher, actor);
     }
 
     private bool IsSessionAttached(ISession session)
@@ -50,20 +53,23 @@ public class RelayServerManager
 
     public IPEndPoint? GetRandomRelayServerAddress(int roomSeed)
     {
-        if (_serverAddressMapping.IsEmpty) return null;
+        _actor.AssertAccess();
+        if ((_serverAddressMapping.Count == 0)) return null;
 
         var servers = _serverAddressMapping.Values.ToArray();
 
-        return servers[roomSeed % servers.Length];
+        return servers[(int)((uint)roomSeed % (uint)servers.Length)];
     }
 
     public bool TryGetRelayServerSession(IPEndPoint endPoint, [NotNullWhen(true)] out ISession? session)
     {
+        _actor.AssertAccess();
         return _relayAddressSessionMapping.TryGetValue(endPoint, out session);
     }
 
     public bool TryGetRelayServerAddress(SessionId sessionId, [NotNullWhen(true)] out IPEndPoint? iPEndPoint)
     {
+        _actor.AssertAccess();
         iPEndPoint = null;
 
         if (!_sessionIdMapping.TryGetValue(sessionId, out var userId)) return false;
@@ -82,6 +88,7 @@ public class RelayServerManager
         Guid sessionUserId,
         ISession session)
     {
+        _actor.AssertAccess();
         if (!_clientManager.IsSessionAttached(id))
         {
             _logger.LogFailedToAttachSession(id);
@@ -98,14 +105,16 @@ public class RelayServerManager
 
     private void ClientManagerOnOnSessionDisconnected(SessionId sessionId)
     {
-        if (!_sessionIdMapping.TryRemove(sessionId, out var userId)) return;
-        if (!_sessionMapping.TryRemove(userId, out var session)) return;
-        if (!_serverAddressMapping.TryRemove(userId, out var endPoint)) return;
-        if (!_relayAddressSessionMapping.TryRemove(endPoint, out _)) return;
+        if (!_sessionIdMapping.Remove(sessionId, out var userId)) return;
+        if (!_sessionMapping.Remove(userId, out var session)) return;
+        if (_serverAddressMapping.Remove(userId, out var endPoint) &&
+            _relayAddressSessionMapping.TryGetValue(endPoint, out var registered) && ReferenceEquals(registered, session))
+            _relayAddressSessionMapping.Remove(endPoint);
 
-        session.Close();
+        _actor.Close(session);
     }
 
+    [ActorMessage]
     private void OnReceivedRegisterRelayServerMessage(MessageContext<RegisterRelayServerMessage> ctx)
     {
         if (!IsSessionAttached(ctx.FromSession)) return;
@@ -118,19 +127,18 @@ public class RelayServerManager
             return;
         }
 
-        if (!_serverAddressMapping.TryAdd(userId, ctx.Message.ServerAddress))
+        if (_serverAddressMapping.TryGetValue(userId, out var registered))
         {
-            _logger.LogFailedToAddServerAddressMapping(userId);
-            return;
+            if (!registered.Equals(ctx.Message.ServerAddress)) return;
+        }
+        else
+        {
+            if (_relayAddressSessionMapping.ContainsKey(ctx.Message.ServerAddress)) return;
+            _serverAddressMapping[userId] = ctx.Message.ServerAddress;
+            _relayAddressSessionMapping[ctx.Message.ServerAddress] = ctx.FromSession;
         }
 
-        if (!_relayAddressSessionMapping.TryAdd(ctx.Message.ServerAddress, ctx.FromSession))
-        {
-            _logger.LogFailedToAddServerAddressMapping(userId);
-            return;
-        }
-
-        _dispatcher.SendAsync(session, new RelayServerRegisteredMessage(_serverSettingProvider.ServerId)).Forget();
+        _actor.Send(_dispatcher, session, new RelayServerRegisteredMessage(_serverSettingProvider.ServerId));
 
         _logger.LogRelayServerRegistered(ctx.FromSession.Id, ctx.Message.ServerId);
     }
@@ -147,6 +155,4 @@ internal static partial class RelayServerManagerLoggers
     [LoggerMessage(LogLevel.Information, "[RELAY_SERVER_MANAGER] Relay server registered {SessionId} with server id {ServerId}")]
     public static partial void LogRelayServerRegistered(this ILogger logger, SessionId sessionId, Guid serverId);
 
-    [LoggerMessage(LogLevel.Error, "[RELAY_SERVER_MANAGER] Failed to add server address mapping {ServerId}")]
-    public static partial void LogFailedToAddServerAddressMapping(this ILogger logger, Guid serverId);
 }

@@ -23,4 +23,6 @@
   <Project Path="ConnectX.Relay/ConnectX.Relay.csproj" />
   <Project Path="ConnectX.Server/ConnectX.Server.csproj" />
   <Project Path="ConnectX.Shared/ConnectX.Shared.csproj" />
+  <Project Path="ConnectX.Actors/ConnectX.Actors.csproj" />
+  <Project Path="ConnectX.Tests/ConnectX.Tests.csproj" />
 </Solution>

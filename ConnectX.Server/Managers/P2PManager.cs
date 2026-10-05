@@ -1,5 +1,5 @@
-﻿using System.Collections.Concurrent;
-using ConnectX.Shared.Helpers;
+using Microsoft.Extensions.Hosting;
+using ConnectX.Actors;
 using ConnectX.Shared.Messages.Identity;
 using ConnectX.Shared.Messages.P2P;
 using Hive.Both.General.Dispatchers;
@@ -9,53 +9,57 @@ using Microsoft.Extensions.Logging;
 
 namespace ConnectX.Server.Managers;
 
-public class P2PManager
+public partial class P2PManager : BackgroundService
 {
     private readonly ClientManager _clientManager;
-    private readonly ConcurrentDictionary<(int Bargain, Guid RequesterId, Guid TargetId),
-        (ISession, P2PConRequest)> _conRequests = new();
+    private readonly Dictionary<(int Bargain, Guid RequesterId, Guid TargetId),
+        (ISession Session, P2PConRequest Request, long CreatedAt)> _conRequests = new();
     private readonly IDispatcher _dispatcher;
-    private readonly GroupManager _groupManager;
+    private readonly TimeProvider _clock;
     private readonly ILogger _logger;
 
-    private readonly ConcurrentDictionary<SessionId, Guid> _sessionIdMapping = new();
-    private readonly ConcurrentDictionary<Guid, ISession> _userSessionMappings = new();
+    private readonly Dictionary<SessionId, Guid> _sessionIdMapping = new();
+    private readonly Dictionary<Guid, ISession> _userSessionMappings = new();
+
+    private readonly ControlPlaneActor _actor;
 
     public P2PManager(
+        ControlPlaneActor actor,
         IDispatcher dispatcher,
         ClientManager clientManager,
-        GroupManager groupManager,
+        TimeProvider clock,
         ILogger<P2PManager> logger)
     {
+        _actor = actor;
         _dispatcher = dispatcher;
         _clientManager = clientManager;
-        _groupManager = groupManager;
+        _clock = clock;
         _logger = logger;
 
         _clientManager.OnSessionDisconnected += ClientManagerOnSessionDisconnected;
 
-        _dispatcher.AddHandler<P2PConRequest>(OnReceivedP2PConRequest);
-        _dispatcher.AddHandler<P2PConAccept>(OnReceivedP2PConAccept);
+        RegisterActorHandlers(dispatcher, actor);
     }
 
     private void ClientManagerOnSessionDisconnected(SessionId sessionId)
     {
         _logger.LogUserDisconnected(sessionId);
 
-        if (_sessionIdMapping.TryRemove(sessionId, out var userId) &&
-            _userSessionMappings.TryRemove(userId, out var attachedSession))
+        if (_sessionIdMapping.Remove(sessionId, out var userId) &&
+            _userSessionMappings.Remove(userId, out var attachedSession))
         {
-            attachedSession.Close();
+            _actor.Close(attachedSession);
 
             foreach (var request in _conRequests
-                         .Where(item => item.Value.Item1.Id == sessionId ||
+                         .Where(item => item.Value.Session.Id == sessionId ||
                                         item.Key.RequesterId == userId ||
                                         item.Key.TargetId == userId)
                          .ToArray())
-                _conRequests.TryRemove(request.Key, out _);
+                _conRequests.Remove(request.Key, out _);
         }
     }
 
+    [ActorMessage]
     private void OnReceivedP2PConRequest(MessageContext<P2PConRequest> ctx)
     {
         _logger.LogUserTryingToMakeP2PConnWithTarget(ctx.Message.SelfId, ctx.Message.TargetId);
@@ -65,60 +69,68 @@ public class P2PManager
 
         if (!_sessionIdMapping.TryGetValue(session.Id, out var requesterId) || requesterId != message.SelfId)
         {
-            ctx.Dispatcher.SendAsync(session, new P2POpResult(false, "Invalid requester identity")
+            _actor.Send(ctx.Dispatcher, session, new P2POpResult(false, "Invalid requester identity")
             {
                 Bargain = message.Bargain,
                 PartnerId = message.TargetId
-            }).Forget();
+            });
+            return;
+        }
+
+        if (_conRequests.Count >= 4096 || _conRequests.Keys.Count(key => key.RequesterId == message.SelfId) >= 256)
+        {
+            _actor.Send(ctx.Dispatcher, session, new P2POpResult(false, "Too many pending connection requests")
+            { Bargain = message.Bargain, PartnerId = message.TargetId });
             return;
         }
 
         var requestKey = (message.Bargain, message.SelfId, message.TargetId);
-        if (!_conRequests.TryAdd(requestKey, (session, message)))
+        if (!_conRequests.TryAdd(requestKey, (session, message, _clock.GetTimestamp())))
         {
             _logger.LogUserTryingToMakeP2PConnWithTargetButTheRequestAlreadyExists(message.SelfId, message.TargetId);
-            ctx.Dispatcher.SendAsync(session, new P2POpResult(false, "Duplicate connection request")
+            _actor.Send(ctx.Dispatcher, session, new P2POpResult(false, "Duplicate connection request")
             {
                 Bargain = message.Bargain,
                 PartnerId = message.TargetId
-            }).Forget();
+            });
             return;
         }
 
         if (!_userSessionMappings.TryGetValue(message.TargetId, out var targetConnection))
         {
             _logger.LogUserTryingToMakeP2PConnWithTargetButTheTargetDoesNotExist(message.SelfId, message.TargetId);
-            _conRequests.TryRemove(requestKey, out _);
+            _conRequests.Remove(requestKey, out _);
 
             var err = new P2POpResult(false, "Target does not exist")
             {
                 Bargain = message.Bargain,
                 PartnerId = message.TargetId
             };
-            ctx.Dispatcher.SendAsync(session, err).Forget();
+            _actor.Send(ctx.Dispatcher, session, err);
 
             return;
         }
 
-        _dispatcher.SendAsync(
+        _actor.Send(_dispatcher,
             targetConnection,
             new P2PConNotification
             {
                 Bargain = message.Bargain,
                 PartnerIds = message.SelfId,
                 PartnerIp = session.RemoteEndPoint!
-            }).Forget();
+            });
 
         var result = new P2POpResult(true)
         {
             Bargain = message.Bargain,
             PartnerId = message.TargetId
         };
-        ctx.Dispatcher.SendAsync(session, result).Forget();
+        _actor.Send(ctx.Dispatcher, session, result);
 
         _logger.LogUserTryingToMakeP2PConnWithTarget(message.SelfId, message.TargetId, session.Id);
     }
 
+    [ActorMessage]
     private void OnReceivedP2PConAccept(MessageContext<P2PConAccept> ctx)
     {
         _logger.LogUserAcceptedP2PConn(ctx.Message.SelfId, ctx.FromSession.Id);
@@ -128,15 +140,15 @@ public class P2PManager
 
         if (!_sessionIdMapping.TryGetValue(from.Id, out var accepterId) || accepterId != message.SelfId)
         {
-            ctx.Dispatcher.SendAsync(from, new P2POpResult(false, "Invalid accepter identity")
+            _actor.Send(ctx.Dispatcher, from, new P2POpResult(false, "Invalid accepter identity")
             {
                 Bargain = message.Bargain,
                 PartnerId = message.PartnerId
-            }).Forget();
+            });
             return;
         }
 
-        if (!_conRequests.TryRemove((message.Bargain, message.PartnerId, message.SelfId), out var value))
+        if (!_conRequests.Remove((message.Bargain, message.PartnerId, message.SelfId), out var value))
         {
             _logger.LogUserTryingToAcceptP2PConnButTheRequestDoesNotExist(message.SelfId, ctx.FromSession.Id);
 
@@ -145,12 +157,12 @@ public class P2PManager
                 Bargain = message.Bargain,
                 PartnerId = message.PartnerId
             };
-            ctx.Dispatcher.SendAsync(from, err).Forget();
+            _actor.Send(ctx.Dispatcher, from, err);
 
             return;
         }
 
-        var (requesterCon, request) = value;
+        var (requesterCon, request, _) = value;
 
         if (request.SelfId != message.PartnerId)
         {
@@ -159,19 +171,19 @@ public class P2PManager
                 Bargain = message.Bargain,
                 PartnerId = message.PartnerId
             };
-            ctx.Dispatcher.SendAsync(from, err).Forget();
+            _actor.Send(ctx.Dispatcher, from, err);
             return;
         }
 
         var time = DateTime.UtcNow.AddSeconds(5).Ticks;
 
-        _dispatcher.SendAsync(
+        _actor.Send(_dispatcher,
             requesterCon,
             new P2PConReady(message.SelfId, time, message)
             {
                 PublicAddress = message.PublicAddress,
                 Bargain = message.Bargain
-            }).Forget();
+            });
 
         var result = new P2POpResult(true)
         {
@@ -183,7 +195,7 @@ public class P2PManager
                 Bargain = message.Bargain
             }
         };
-        ctx.Dispatcher.SendAsync(from, result).Forget();
+        _actor.Send(ctx.Dispatcher, from, result);
 
         _logger.LogUserAcceptedP2PConn(message.SelfId, ctx.FromSession.Id);
     }
@@ -193,6 +205,7 @@ public class P2PManager
         Guid userId,
         SigninMessage signinMessage)
     {
+        _actor.AssertAccess();
         if (!signinMessage.JoinP2PNetwork) return;
         if (!_userSessionMappings.TryAdd(userId, session) ||
             !_sessionIdMapping.TryAdd(session.Id, userId))
@@ -200,21 +213,33 @@ public class P2PManager
             _logger.LogP2PFailedToAddSessionToSessionMapping(session.Id);
         }
     }
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1), _clock);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(stoppingToken))
+                await _actor.InvokeAsync(() =>
+                {
+                    foreach (var (key, request) in _conRequests.ToArray())
+                        if (_clock.GetElapsedTime(request.CreatedAt) > TimeSpan.FromSeconds(30))
+                        {
+                            _conRequests.Remove(key);
+                            _actor.Send(_dispatcher, request.Session, new P2POpResult(false, "Connection request expired")
+                            { Bargain = key.Bargain, PartnerId = key.TargetId });
+                        }
+                }, stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
+    }
+
 }
 
 internal static partial class P2PManagerLoggers
 {
-    [LoggerMessage(LogLevel.Error, "[P2P_MANAGER] Session [{sessionId}] not found in the record!")]
-    public static partial void LogSessionNotFound(this ILogger logger, SessionId sessionId);
-
-    [LoggerMessage(LogLevel.Information, "[P2P_MANAGER] No possible interconnect user found!")]
-    public static partial void LogNoInterconnectUserFound(this ILogger logger);
 
     [LoggerMessage(LogLevel.Information, "[P2P_MANAGER] User disconnected, session id: {sessionId}")]
     public static partial void LogUserDisconnected(this ILogger logger, SessionId sessionId);
-
-    [LoggerMessage(LogLevel.Information, "[P2P_MANAGER] Temp link disconnected, session id: {sessionId}")]
-    public static partial void LogTempLinkDisconnected(this ILogger logger, SessionId sessionId);
 
     [LoggerMessage(LogLevel.Information,
         "[P2P_MANAGER] User {userId} trying to make P2P conn with target [{targetId}]")]
@@ -247,7 +272,4 @@ internal static partial class P2PManagerLoggers
         "[P2P_MANAGER] Failed to add session to the session mapping, session id: {sessionId}")]
     public static partial void LogP2PFailedToAddSessionToSessionMapping(this ILogger logger, SessionId sessionId);
 
-    [LoggerMessage(LogLevel.Information,
-        "[P2P_MANAGER] User has {count} possible interconnect users, session id: {sessionId}")]
-    public static partial void LogUserHasPossibleInterconnectUsers(this ILogger logger, int count, SessionId sessionId);
 }

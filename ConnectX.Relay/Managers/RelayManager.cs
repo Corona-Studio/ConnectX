@@ -1,297 +1,280 @@
-﻿using System.Buffers;
-using System.Collections.Concurrent;
-using System.Net;
-using ConnectX.Relay.Helpers;
+using ConnectX.Actors;
 using ConnectX.Relay.Interfaces;
-using ConnectX.Shared.Helpers;
 using ConnectX.Shared.Messages.Relay;
 using ConnectX.Shared.Messages.Relay.Datagram;
 using ConnectX.Shared.Models;
 using Hive.Both.General.Dispatchers;
 using Hive.Network.Abstractions;
 using Hive.Network.Abstractions.Session;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace ConnectX.Relay.Managers;
 
-public class RelayManager
+/// <summary>Control state belongs to the actor; stream input/output adapters own all cross-thread I/O.</summary>
+public partial class RelayManager : BackgroundService
 {
-    private readonly ConcurrentDictionary<SessionId, Guid> _sessionUserIdMapping = new();
-    private readonly ConcurrentDictionary<Guid, Guid> _userIdToRoomMapping = new();
-    private readonly ConcurrentDictionary<Guid, Guid> _roomOwnerRecords = new();
-
-    private readonly ConcurrentDictionary<Guid, ISession> _userIdDataSessionMapping = new();
-    private readonly ConcurrentDictionary<Guid, ConcurrentBag<SessionId>> _userIdWorkerSessionMapping = new();
-
-    private readonly ConcurrentDictionary<SessionId, (Guid From, Guid To)> _workerSessionRouteMapping = new();
-    private readonly ConcurrentDictionary<(Guid From, Guid To), ISession> _workerSessionMapping = new();
-
+    private sealed record PendingLink(ISession Session, Guid User, Guid? Target, Guid Room, long Started);
+    private readonly Dictionary<SessionId, PendingLink> _pendingLinks = [];
+    private readonly Dictionary<SessionId, RelayWorkerInput> _workerInputs = [];
+    private readonly TimeProvider _clock;
+    private readonly Dictionary<Guid, Guid> _rooms = [];
+    private readonly Dictionary<Guid, ISession> _data = [];
+    private readonly Dictionary<SessionId, Guid> _dataUsers = [];
+    private readonly Dictionary<(Guid From, Guid To), ISession> _workers = [];
+    private readonly ControlPlaneActor _actor;
     private readonly ClientManager _clientManager;
     private readonly IServerLinkHolder _serverLinkHolder;
-    private readonly IServerSettingProvider _serverSettingProvider;
+    private readonly IServerSettingProvider _settings;
     private readonly IDispatcher _dispatcher;
     private readonly ILogger _logger;
 
-    public RelayManager(
-        ClientManager clientManager,
-        IServerLinkHolder serverLinkHolder,
-        IDispatcher dispatcher,
-        IServerSettingProvider serverSettingProvider,
-        ILogger<RelayManager> logger)
+    public RelayManager(ControlPlaneActor actor, ClientManager clientManager, IServerLinkHolder serverLinkHolder,
+        IDispatcher dispatcher, IServerSettingProvider serverSettingProvider, ILogger<RelayManager> logger, TimeProvider clock)
     {
+        _actor = actor;
+        _clock = clock;
         _clientManager = clientManager;
         _serverLinkHolder = serverLinkHolder;
-        _serverSettingProvider = serverSettingProvider;
+        _settings = serverSettingProvider;
         _dispatcher = dispatcher;
         _logger = logger;
-
-        _clientManager.OnSessionDisconnected += ClientManagerOnSessionDisconnected;
-
-        dispatcher.AddHandler<RelayDatagram>(OnRelayDatagramReceived);
-        dispatcher.AddHandler<UpdateRelayUserRoomMappingMessage>(OnUpdateRelayUserRoomMappingMessageReceived);
+        clientManager.OnSessionDisconnected += OnDisconnected;
+        RegisterActorHandlers(dispatcher, actor);
     }
 
-    public void AttachDataSession(
-        ISession session,
-        Guid userId,
-        Guid roomId)
+    public void CreateDataLink(ISession session, Guid user, Guid room) => BeginLink(session, user, null, room);
+    public void CreateWorkerLink(ISession session, Guid user, Guid target, Guid room) => BeginLink(session, user, target, room);
+
+    private void BeginLink(ISession session, Guid user, Guid? target, Guid room)
     {
-        if (!_userIdToRoomMapping.TryGetValue(userId, out var registeredRoomId))
+        _actor.AssertAccess();
+        var request = new PendingLink(session, user, target, room, _clock.GetTimestamp());
+        if (TryCompleteLink(request)) { CompletePendingLinks(); return; }
+        if (_pendingLinks.Count >= 1024)
         {
-            _logger.LogCanNotFindCorrespondingRoomForUser(session.Id, userId, session.RemoteEndPoint?.Address ?? IPAddress.None);
+            _logger.LogLinkRejected(session.Id, user, room);
+            _actor.Close(session);
             return;
         }
-
-        if (registeredRoomId != roomId)
-        {
-            _logger.LogUserRoomDoesNotMatchTheRecord(session.Id, session.RemoteEndPoint?.Address ?? IPAddress.None);
-            return;
-        }
-
-        if (session.RemoteEndPoint == null)
-        {
-            _logger.LogSessionRemoteEndPointIsNull(session.Id);
-            return;
-        }
-
-        _userIdDataSessionMapping.AddOrUpdate(userId, _ => session, (_, _) => session);
-        _sessionUserIdMapping.AddOrUpdate(session.Id, _ => userId, (_, _) => userId);
+        _pendingLinks[session.Id] = request;
     }
 
-    public void AttachWorkerSession(
-        ISession session,
-        Guid userId,
-        Guid relayTo,
-        Guid roomId)
+    private bool TryCompleteLink(PendingLink request)
     {
-        if (!_userIdToRoomMapping.TryGetValue(userId, out var registeredRoomId))
+        if ((_rooms.TryGetValue(request.User, out var room) && room != request.Room) ||
+            (request.Target is { } target && (_rooms.TryGetValue(target, out var targetRoom) && targetRoom != request.Room)))
         {
-            _logger.LogCanNotFindCorrespondingRoomForUser(session.Id, userId, session.RemoteEndPoint?.Address ?? IPAddress.None);
-            return;
+            _logger.LogLinkRejected(request.Session.Id, request.User, request.Room);
+            _actor.Close(request.Session);
+            return true;
         }
-
-        if (registeredRoomId != roomId)
+        // Different TCP connections can deliver client handshakes before the authoritative mapping.
+        if (!IsMember(request.User, request.Room) || (request.Target is { } to &&
+            (!IsMember(to, request.Room) || !_data.ContainsKey(request.User)))) return false;
+        if (request.Target is { } relayTo)
         {
-            _logger.LogUserRoomDoesNotMatchTheRecord(session.Id, session.RemoteEndPoint?.Address ?? IPAddress.None);
-            return;
+            if (!AttachWorkerSession(request.Session, request.User, relayTo, request.Room)) _actor.Close(request.Session);
+            else
+            {
+                _actor.Send(_dispatcher, request.Session, new RelayWorkerLinkCreatedMessage());
+                PublishRoutes();
+            }
         }
-
-        if (session.RemoteEndPoint == null)
+        else
         {
-            _logger.LogSessionRemoteEndPointIsNull(session.Id);
-            return;
+            if (!AttachDataSession(request.Session, request.User, request.Room)) _actor.Close(request.Session);
+            else
+            {
+                _clientManager.AttachSession(request.Session.Id, request.Session);
+                _actor.Send(_dispatcher, request.Session, new RelayDataLinkCreatedMessage());
+            }
         }
+        return true;
+    }
 
+    private void CompletePendingLinks()
+    {
+        foreach (var (id, request) in _pendingLinks.ToArray())
+        {
+            if (_clock.GetElapsedTime(request.Started) > TimeSpan.FromSeconds(5) || !SessionHealth.IsConnected(request.Session))
+            {
+                _pendingLinks.Remove(id);
+                _actor.Close(request.Session);
+            }
+            else if (TryCompleteLink(request)) _pendingLinks.Remove(id);
+        }
+    }
+
+    public bool AttachDataSession(ISession session, Guid userId, Guid roomId)
+    {
+        _actor.AssertAccess();
+        if (!IsMember(userId, roomId) || session.RemoteEndPoint == null) return false;
+        if (_data.TryGetValue(userId, out var previous))
+        {
+            if (ReferenceEquals(previous, session)) return true;
+            _clientManager.DetachSession(previous.Id);
+        }
+        _data[userId] = session;
+        _dataUsers[session.Id] = userId;
+        return true;
+    }
+
+    public bool AttachWorkerSession(ISession session, Guid userId, Guid relayTo, Guid roomId)
+    {
+        _actor.AssertAccess();
+        if (userId == relayTo || !IsMember(userId, roomId) || !IsMember(relayTo, roomId) ||
+            !_data.ContainsKey(userId) || session.RemoteEndPoint == null) return false;
         var pair = (userId, relayTo);
-
-        var sessionIds = _userIdWorkerSessionMapping.GetValueOrDefault(userId) ?? [];
-        sessionIds.Add(session.Id);
-
-        _userIdWorkerSessionMapping.AddOrUpdate(userId, _ => sessionIds, (_, _) => sessionIds);
-        _workerSessionRouteMapping.AddOrUpdate(session.Id, _ => pair, (_, _) => pair);
-        _workerSessionMapping.AddOrUpdate(pair, _ => session, (_, _) => session);
-
+        if (_workers.Remove(pair, out var previous)) CloseWorker(previous);
+        _workers[pair] = session;
+        _actor.PrepareOutput(session);
         session.OnMessageReceived -= _dispatcher.Dispatch;
-        session.OnMessageReceived += SessionOnDataReceived;
-
-        _logger.LogRelayWorkerLinkAttached(session.Id, userId, relayTo, userId);
+        var input = new RelayWorkerInput(_actor, session);
+        _workerInputs[session.Id] = input;
+        session.OnMessageReceived += input.Receive;
+        return true;
     }
+
+    // Publish only after the handshake acknowledgement has entered the connection's output queue.
+    public void ActivateWorkerSession() { _actor.AssertAccess(); PublishRoutes(); }
+
+    private bool IsMember(Guid userId, Guid roomId) => _rooms.TryGetValue(userId, out var room) && room == roomId;
 
     public RelayServerLoadInfoMessage GetRelayServerLoad()
     {
+        _actor.AssertAccess();
         return new RelayServerLoadInfoMessage
         {
-            CurrentConnectionCount = _workerSessionRouteMapping.Count,
-            MaxReferenceConnectionCount = _serverSettingProvider.MaxReferenceConnectionCount,
-            Priority = _serverSettingProvider.ServerPriority
+            CurrentConnectionCount = _workers.Count,
+            MaxReferenceConnectionCount = _settings.MaxReferenceConnectionCount,
+            Priority = _settings.ServerPriority
         };
     }
 
-    private void SessionOnDataReceived(ISession session, ReadOnlySequence<byte> buffer)
+    private void PublishRoutes()
     {
-        if (!_workerSessionRouteMapping.TryGetValue(session.Id, out var routingInfo) ||
-            !_workerSessionMapping.TryGetValue((routingInfo.To, routingInfo.From), out var toSession))
-        {
-            _logger.LogRelayWorkerDestinationNotFound(session.Id, routingInfo.From, routingInfo.To);
-            return;
-        }
-
-        var ms = new MemoryStream(buffer.ToArray());
-        //var ms = buffer.AsStream();
-        toSession.TrySendAsync(ms).Forget();
-
-        _logger.LogRelayWorkerSent(session.Id, routingInfo.To);
+        foreach (var (pair, source) in _workers)
+            _workerInputs[source.Id].ConnectTo(_workers.GetValueOrDefault((pair.To, pair.From)));
     }
 
-    private void OnUpdateRelayUserRoomMappingMessageReceived(MessageContext<UpdateRelayUserRoomMappingMessage> ctx)
+    [ActorMessage]
+    private void OnMappingUpdated(MessageContext<UpdateRelayUserRoomMappingMessage> ctx)
     {
-        if (_serverLinkHolder.ServerSession == null)
+        if (!ReferenceEquals(ctx.FromSession, _serverLinkHolder.ServerSession))
         {
-            _logger.LogSomeSessionIsFakingMainServer(ctx.FromSession.RemoteEndPoint);
+            _logger.LogMappingUnauthorized(ctx.FromSession.Id);
             return;
         }
-
-        if (!ctx.FromSession.IsSameSession(_serverLinkHolder.ServerSession))
-        {
-            _logger.LogRelayInfoUpdateUnauthorized(ctx.FromSession.Id, ctx.FromSession.RemoteEndPoint?.Address ?? IPAddress.None);
-            return;
-        }
-
         var message = ctx.Message;
-
-        switch (message.State)
+        if (message.State == GroupUserStates.Joined)
         {
-            case GroupUserStates.Joined:
-                if (message.IsGroupOwner)
-                    _roomOwnerRecords.AddOrUpdate(message.UserId, message.UserId, (_, _) => message.UserId);
+            if (_rooms.TryGetValue(message.UserId, out var previous) && previous != message.RoomId) RemoveUser(message.UserId);
+            _rooms[message.UserId] = message.RoomId;
+            CompletePendingLinks();
+            return;
+        }
+        if (!_rooms.TryGetValue(message.UserId, out var current) || current != message.RoomId) return;
+        if (message.State == GroupUserStates.Dismissed)
+        {
+            foreach (var user in _rooms.Where(x => x.Value == message.RoomId).Select(x => x.Key).ToArray()) RemoveUser(user);
+        }
+        else if (message.State is GroupUserStates.Left or GroupUserStates.Kicked or GroupUserStates.Disconnected)
+            RemoveUser(message.UserId);
+    }
 
-                _userIdToRoomMapping.AddOrUpdate(message.UserId, message.RoomId, (_, _) => message.RoomId);
-                _logger.LogRelayInfoAdded(message.UserId, message.RoomId, _userIdToRoomMapping.Count, message.IsGroupOwner);
-                break;
-            case GroupUserStates.Dismissed:
-                _roomOwnerRecords.TryRemove(message.UserId, out _);
-                _userIdToRoomMapping.TryRemove(message.UserId, out _);
-                break;
-            case GroupUserStates.Left:
-            case GroupUserStates.Kicked:
-            case GroupUserStates.Disconnected:
-                if (!_roomOwnerRecords.TryGetValue(message.UserId, out _))
+    [ActorMessage]
+    private void OnDatagram(MessageContext<RelayDatagram> ctx)
+    {
+        var message = ctx.Message;
+        if (!_dataUsers.TryGetValue(ctx.FromSession.Id, out var from) || from != message.From ||
+            !_data.TryGetValue(from, out var source) || !ReferenceEquals(source, ctx.FromSession) ||
+            !_rooms.TryGetValue(from, out var room) || !IsMember(message.To, room) ||
+            !_data.TryGetValue(message.To, out var target)) return;
+        _actor.Send(_dispatcher, target, new UnwrappedRelayDatagram(from, message.Payload));
+    }
+
+    private void OnDisconnected(SessionId id)
+    {
+        if (!_dataUsers.Remove(id, out var user)) return;
+        if (!_data.TryGetValue(user, out var current) || current.Id != id) return;
+        _data.Remove(user);
+        RemoveWorkers(user);
+    }
+
+    private void RemoveUser(Guid user)
+    {
+        _rooms.Remove(user);
+        foreach (var (id, request) in _pendingLinks.Where(x => x.Value.User == user || x.Value.Target == user).ToArray())
+        {
+            _pendingLinks.Remove(id);
+            _actor.Close(request.Session);
+        }
+        if (_data.TryGetValue(user, out var session)) _clientManager.DetachSession(session.Id);
+        RemoveWorkers(user);
+    }
+
+    private void RemoveWorkers(Guid user)
+    {
+        foreach (var (pair, session) in _workers.Where(x => x.Key.From == user || x.Key.To == user).ToArray())
+        {
+            _workers.Remove(pair);
+            CloseWorker(session);
+        }
+        PublishRoutes();
+    }
+
+    private void CloseWorker(ISession session)
+    {
+        if (_workerInputs.Remove(session.Id, out var input))
+        {
+            session.OnMessageReceived -= input.Receive;
+            input.Close();
+        }
+        _actor.Close(session);
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(stoppingToken))
+                await _actor.InvokeAsync(() =>
                 {
-                    _userIdToRoomMapping.TryRemove(message.UserId, out _);
-                    _logger.LogRelayDestroyed(message.RoomId, message.UserId, message.State);
-                }
-
-                break;
+                    CompletePendingLinks();
+                    var changed = false;
+                    foreach (var (pair, session) in _workers.ToArray())
+                        if (!SessionHealth.IsConnected(session))
+                        {
+                            _workers.Remove(pair);
+                            CloseWorker(session);
+                            changed = true;
+                        }
+                    if (changed) PublishRoutes();
+                }, stoppingToken);
         }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
     }
 
-    private void OnRelayDatagramReceived(MessageContext<RelayDatagram> ctx)
+    public override async Task StopAsync(CancellationToken cancellationToken)
     {
-        var message = ctx.Message;
-
-        if (!_userIdDataSessionMapping.TryGetValue(message.To, out var session))
+        await base.StopAsync(cancellationToken);
+        await _actor.InvokeAsync(() =>
         {
-            _logger.LogRelayDestinationNotFound(ctx.FromSession.Id, message.From, message.To);
-            return;
-        }
-
-        var unwrappedMessage = new UnwrappedRelayDatagram(message.From, message.Payload);
-
-        _dispatcher.SendAsync(session, unwrappedMessage).Forget();
-
-        _logger.LogRelayDatagramSent(ctx.FromSession.Id, message.To);
-    }
-
-    private void ClientManagerOnSessionDisconnected(SessionId sessionId)
-    {
-        if (!_sessionUserIdMapping.TryRemove(sessionId, out var outUserId)) return;
-
-        HandleDataSession(outUserId);
-        HandleWorkerSession(outUserId);
-
-        return;
-
-        void HandleDataSession(Guid userId)
-        {
-            if (!_userIdDataSessionMapping.TryRemove(userId, out var session)) return;
-            if (!_roomOwnerRecords.TryGetValue(userId, out _))
-            {
-                if (!_userIdToRoomMapping.TryRemove(userId, out var roomId)) return;
-
-                _logger.LogRelayDestroyed(roomId, userId, GroupUserStates.Disconnected);
-            }
-
-            // Because the session is already disconnected, we just recycle the link with it.
-            // No need to ask the client's current ref count
-            if (_userIdDataSessionMapping.Any(p => p.Value == session)) return;
-
-            session.Close();
-        }
-
-        void HandleWorkerSession(Guid userId)
-        {
-            if (!_userIdWorkerSessionMapping.TryRemove(userId, out var sessionIds)) return;
-
-            foreach (var workerSessionId in sessionIds)
-            {
-                if (!_workerSessionRouteMapping.TryRemove(workerSessionId, out var routingInfo)) continue;
-                if (!_workerSessionMapping.TryRemove(routingInfo, out var workerSession)) continue;
-
-                workerSession.Close();
-            }
-
-            _logger.LogRelayWorkerDestroyed(sessionId);
-        }
+            foreach (var request in _pendingLinks.Values) _actor.Close(request.Session);
+            _pendingLinks.Clear();
+            foreach (var session in _workers.Values) CloseWorker(session);
+            _workers.Clear();
+            PublishRoutes();
+        }, cancellationToken);
     }
 }
 
 internal static partial class RelayManagerLoggers
 {
-    [LoggerMessage(LogLevel.Warning, "[RELAY_MANAGER] RelayTo is empty from session [{sessionId}], possible bug or wrong sender!")]
-    public static partial void LogRelayToEmpty(this ILogger logger, SessionId sessionId);
-
-    [LoggerMessage(LogLevel.Information, "[RELAY_MANAGER] Relay destroyed, room [{roomId}], user [{userId}], state [{state}]")]
-    public static partial void LogRelayDestroyed(this ILogger logger, Guid roomId, Guid userId, GroupUserStates state);
-
-    [LoggerMessage(LogLevel.Information, "[RELAY_MANAGER] Relay worker destroyed, SessionId [{sessionId}]")]
-    public static partial void LogRelayWorkerDestroyed(this ILogger logger, SessionId sessionId);
-
-    [LoggerMessage(LogLevel.Information, "[RELAY_MANAGER] Relay info added, user [{userId}], room [{roomId}], is room owner [{isRoomOwner}], registered mapping count: {mappingCount}")]
-    public static partial void LogRelayInfoAdded(this ILogger logger, Guid userId, Guid roomId, int mappingCount, bool isRoomOwner);
-
-    [LoggerMessage(LogLevel.Warning, "[RELAY_MANAGER] Relay worker not found [{sessionId}] {from} -> {to}, possible bug or wrong sender!")]
-    public static partial void LogRelayWorkerDestinationNotFound(this ILogger logger, SessionId sessionId, Guid? from, Guid? to);
-
-    [LoggerMessage(LogLevel.Warning, "[RELAY_MANAGER] Relay not found [{sessionId}] {from} -> {to}, possible bug or wrong sender!")]
-    public static partial void LogRelayDestinationNotFound(this ILogger logger, SessionId sessionId, Guid? from, Guid? to);
-
-    [LoggerMessage(LogLevel.Debug, "[RELAY_MANAGER] Relay datagram sent from session [{fromSessionId}] to user [{toUserId}]")]
-    public static partial void LogRelayDatagramSent(this ILogger logger, SessionId fromSessionId, Guid toUserId);
-
-    [LoggerMessage(LogLevel.Debug, "[RELAY_MANAGER] Relay worker sent stream from session [{fromSessionId}] to user [{toUserId}]")]
-    public static partial void LogRelayWorkerSent(this ILogger logger, SessionId fromSessionId, Guid toUserId);
-
-    [LoggerMessage(LogLevel.Information, "[RELAY_MANAGER] Relay link attached, session [{sessionId}] with user [{userId}]")]
-    public static partial void LogRelayLinkAttached(this ILogger logger, SessionId sessionId, Guid userId);
-
-    [LoggerMessage(LogLevel.Information, "[RELAY_MANAGER] Relay worker link attached, session [{sessionId}] {from} -> {to} with user [{userId}]")]
-    public static partial void LogRelayWorkerLinkAttached(this ILogger logger, SessionId sessionId, Guid from, Guid to, Guid userId);
-
-    [LoggerMessage(LogLevel.Warning, "[RELAY_MANAGER] Relay info update unauthorized from session [{sessionId}] {address}")]
-    public static partial void LogRelayInfoUpdateUnauthorized(this ILogger logger, SessionId sessionId, IPAddress address);
-
-    [LoggerMessage(LogLevel.Warning, "[RELAY_MANAGER] Can not find corresponding room for user [{sessionId}][{userId}] {address}")]
-    public static partial void LogCanNotFindCorrespondingRoomForUser(this ILogger logger, SessionId sessionId, Guid userId, IPAddress address);
-
-    [LoggerMessage(LogLevel.Warning, "[RELAY_MANAGER] User room does not match the record from session [{sessionId}] {address}")]
-    public static partial void LogUserRoomDoesNotMatchTheRecord(this ILogger logger, SessionId sessionId, IPAddress address);
-    
-    [LoggerMessage(LogLevel.Warning, "[RELAY_MANAGER] Session remote end point is null [{sessionId}]")]
-    public static partial void LogSessionRemoteEndPointIsNull(this ILogger logger, SessionId sessionId);
-
-    [LoggerMessage(LogLevel.Critical, "[RELAY_MANAGER] Some session is faking main server [{address}]")]
-    public static partial void LogSomeSessionIsFakingMainServer(this ILogger logger, IPEndPoint? address);
-
-    [LoggerMessage(LogLevel.Warning, "[RELAY_MANAGER] Relay link recycle timeout [{sessionId}] {targetId}, link recycled")]
-    public static partial void LogRelayLinkRecycleTimeout(this ILogger logger, SessionId sessionId, Guid targetId);
+    [LoggerMessage(LogLevel.Warning, "Relay link rejected: session {sessionId}, user {userId}, room {roomId}")]
+    public static partial void LogLinkRejected(this ILogger logger, SessionId sessionId, Guid userId, Guid roomId);
+    [LoggerMessage(LogLevel.Warning, "Unauthorized relay mapping update from session {sessionId}")]
+    public static partial void LogMappingUnauthorized(this ILogger logger, SessionId sessionId);
 }

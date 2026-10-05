@@ -156,3 +156,5 @@ ConnectX 使用了 ZeroTier，该项目自 2025 年 1 月 1 日 起采用 Apache
 ## 耻辱柱
 
 在此，我们将列出所有使用我们的代码但未遵守 MIT 许可的程序。
+
+Server / Relay 的状态归属、消息时序与验证方式见 [actor 架构说明](docs/actor-architecture.md)。

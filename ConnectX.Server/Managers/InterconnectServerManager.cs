@@ -1,10 +1,9 @@
-﻿using System.Collections.Concurrent;
+using ConnectX.Actors;
 using System.Net;
 using Hive.Network.Abstractions.Session;
 using Hive.Network.Abstractions;
 using Microsoft.Extensions.Logging;
 using ConnectX.Server.Messages.Queries;
-using ConnectX.Shared.Helpers;
 using Hive.Both.General.Dispatchers;
 using ConnectX.Server.Interfaces;
 using ConnectX.Shared.Messages.Group;
@@ -13,10 +12,10 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace ConnectX.Server.Managers;
 
-public class InterconnectServerManager
+public partial class InterconnectServerManager
 {
-    private readonly ConcurrentDictionary<SessionId, InterconnectServerRegistration> _registerServerInfo = [];
-    private readonly ConcurrentDictionary<SessionId, ISession> _sessionMapping = new();
+    private readonly Dictionary<SessionId, InterconnectServerRegistration> _registerServerInfo = [];
+    private readonly Dictionary<SessionId, ISession> _sessionMapping = new();
 
     private readonly ClientManager _clientManager;
     private readonly IInterconnectServerSettingProvider _interconnectServerSettingProvider;
@@ -24,13 +23,17 @@ public class InterconnectServerManager
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly ILogger _logger;
 
+    private readonly ControlPlaneActor _actor;
+
     public InterconnectServerManager(
+        ControlPlaneActor actor,
         ClientManager clientManager,
         IInterconnectServerSettingProvider interconnectServerSettingProvider,
         IDispatcher dispatcher,
         IServiceScopeFactory serviceScopeFactory,
         ILogger<InterconnectServerManager> logger)
     {
+        _actor = actor;
         _clientManager = clientManager;
         _interconnectServerSettingProvider = interconnectServerSettingProvider;
         _dispatcher = dispatcher;
@@ -40,29 +43,32 @@ public class InterconnectServerManager
         _clientManager.OnSessionDisconnected += OnClientSessionDisconnected;
 
         // This should only be used for current server
-        _dispatcher.AddHandler<QueryRemoteServerRoomInfo>(OnQueryRemoteServerRoomInfoReceived);
+        RegisterActorHandlers(dispatcher, actor);
     }
 
     public bool IsServerRegisteredForInterconnect(SessionId sessionId)
     {
+        _actor.AssertAccess();
         return _sessionMapping.ContainsKey(sessionId);
     }
 
     private void OnClientSessionDisconnected(SessionId sessionId)
     {
-        if (!_sessionMapping.TryRemove(sessionId, out var session))
+        if (!_sessionMapping.Remove(sessionId, out var session))
             return;
 
-        session.Close();
+        _actor.Close(session);
 
-        if (!_registerServerInfo.TryRemove(sessionId, out var regInfo))
+        if (!_registerServerInfo.Remove(sessionId, out var regInfo))
             return;
 
         _logger.LogInterconnectServerDisconnected(sessionId, regInfo.ServerAddress, regInfo.ServerName);
     }
 
+    [ActorMessage]
     private void OnQueryRemoteServerRoomInfoReceived(MessageContext<QueryRemoteServerRoomInfo> ctx)
     {
+        if (!_sessionMapping.ContainsKey(ctx.FromSession.Id)) return;
         using var scope = _serviceScopeFactory.CreateScope();
         var groupManager = scope.ServiceProvider.GetRequiredService<GroupManager>();
 
@@ -74,16 +80,16 @@ public class InterconnectServerManager
                 ctx.FromSession.RemoteEndPoint,
                 ctx.Message.JoinGroup.GroupId);
 
-            var failedRes = new QueryRemoteServerRoomInfoResponse(true);
+            var failedRes = new QueryRemoteServerRoomInfoResponse(false);
 
-            _dispatcher.SendAsync(fromSession, failedRes).Forget();
+            _actor.Send(_dispatcher, fromSession, failedRes);
 
             return;
         }
 
         var res = new QueryRemoteServerRoomInfoResponse(true);
 
-        _dispatcher.SendAsync(fromSession, res).Forget();
+        _actor.Send(_dispatcher, fromSession, res);
 
         _logger.LogRemoteServerQueriedRoomInfo(
             ctx.FromSession.RemoteEndPoint,
@@ -91,16 +97,24 @@ public class InterconnectServerManager
             group.RoomName);
     }
 
-    public async Task<InterconnectServerRegistration?> TryFindTargetRemoteServerForRoomAsync(JoinGroup joinGroup)
+    public (ISession Session, InterconnectServerRegistration Registration)[] GetRegisteredServers()
+    {
+        _actor.AssertAccess();
+        return _sessionMapping.Select(x => (x.Value, _registerServerInfo[x.Key])).ToArray();
+    }
+
+    public async Task<InterconnectServerRegistration?> FindRemoteRoomAsync(JoinGroup joinGroup,
+        (ISession Session, InterconnectServerRegistration Registration)[] servers, CancellationToken token)
     {
         var query = new QueryRemoteServerRoomInfo
         {
             JoinGroup = joinGroup
         };
 
-        foreach (var (sessionId, session) in _sessionMapping)
+        foreach (var (session, regInfo) in servers)
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
+            cts.CancelAfter(TimeSpan.FromSeconds(10));
             var res = await _dispatcher.SendAndListenOnce<QueryRemoteServerRoomInfo, QueryRemoteServerRoomInfoResponse>(
                 session,
                 query,
@@ -108,14 +122,6 @@ public class InterconnectServerManager
 
             if (res == null) continue;
             if (!res.Found) continue;
-            if (!_registerServerInfo.TryGetValue(sessionId, out var regInfo))
-            {
-                _logger.LogRoomFoundButMappingBroken(sessionId);
-                break;
-            }
-
-            _logger.LogRoomInfoFoundFromRemoteServer(sessionId, regInfo);
-
             return regInfo;
         }
 
@@ -129,22 +135,18 @@ public class InterconnectServerManager
         ISession session,
         InterconnectServerRegistration message)
     {
+        _actor.AssertAccess();
         if (!_interconnectServerSettingProvider.EndPoints.Contains(message.ServerAddress))
         {
             _logger.LogUnauthorizedServerTryingToMakeInterconnect(message.ServerAddress);
-            session.Close();
+            _actor.Close(session);
 
-            return id;
+            return default;
         }
 
-        _registerServerInfo.AddOrUpdate(id, _ => message, (_, _) => message);
-        _sessionMapping.AddOrUpdate(id, _ => session, (_, oldSession) =>
-        {
-            _logger.LogInterconnectServerDisconnectedBecauseReplaced(id, message.ServerAddress, message.ServerName);
-            oldSession.Close();
-
-            return session;
-        });
+        _registerServerInfo[id] = message;
+        if (_sessionMapping.TryGetValue(id, out var oldSession)) _actor.Close(oldSession);
+        _sessionMapping[id] = session;
 
         _logger.LogInterconnectServerAttached(
             id,
@@ -185,15 +187,6 @@ internal static partial class InterconnectServerManagerLoggers
 
     [LoggerMessage(
         LogLevel.Information,
-        "Interconnect server [{SessionId}] disconnected from [{ServerAddress}] with name {ServerName} because it was replaced.")]
-    public static partial void LogInterconnectServerDisconnectedBecauseReplaced(
-        this ILogger logger,
-        SessionId sessionId,
-        IPEndPoint serverAddress,
-        string serverName);
-
-    [LoggerMessage(
-        LogLevel.Information,
         "Interconnect server [{SessionId}] attached with name {ServerName} from [{ServerAddress}].")]
     public static partial void LogInterconnectServerAttached(
         this ILogger logger,
@@ -210,23 +203,9 @@ internal static partial class InterconnectServerManagerLoggers
 
     [LoggerMessage(
         LogLevel.Error,
-        "Room found but mapping is broken. Session [{SessionId}] does not exist. Possible internal error or bug!")]
-    public static partial void LogRoomFoundButMappingBroken(
-        this ILogger logger,
-        SessionId sessionId);
-
-    [LoggerMessage(
-        LogLevel.Error,
         "Failed to get room info from remote server [{JoinGroup}].")]
     public static partial void LogFailedToGetRoomInfoFromRemoteServer(
         this ILogger logger,
         JoinGroup joinGroup);
 
-    [LoggerMessage(
-        LogLevel.Information,
-        "Room info found from remote server [{SessionId}] with registration {Registration}.")]
-    public static partial void LogRoomInfoFoundFromRemoteServer(
-        this ILogger logger,
-        SessionId sessionId,
-        InterconnectServerRegistration registration);
 }

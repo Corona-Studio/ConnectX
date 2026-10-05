@@ -1,4 +1,6 @@
-﻿using ConnectX.Shared.Helpers;
+using Hive.Both.General.Dispatchers;
+using ConnectX.Actors;
+using ConnectX.Shared.Helpers;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Serilog;
@@ -61,7 +63,11 @@ namespace ConnectX.Relay
 
             builder.ConfigureServices((ctx, services) =>
             {
+                services.AddSingleton(TimeProvider.System);
+                services.AddSingleton<ControlPlaneActor>();
+                services.AddHostedService(sp => sp.GetRequiredService<ControlPlaneActor>());
                 services.AddConnectXEssentials();
+                services.AddSingleton<IDispatcher, ActorDispatcher>();
                 services.AddSingleton<IServerSettingProvider>(_ => GetSettings(ctx.Configuration));
 
                 services.AddSingleton<IServerLinkHolder, ServerLinkHolder>();
@@ -69,6 +75,7 @@ namespace ConnectX.Relay
 
                 services.AddSingleton<ClientManager>();
                 services.AddSingleton<RelayManager>();
+                services.AddHostedService(sp => sp.GetRequiredService<RelayManager>());
 
                 services.AddHostedService(sc => sc.GetRequiredService<ClientManager>());
 

@@ -1,4 +1,5 @@
-using System.Collections.Concurrent;
+using ConnectX.Shared.Helpers;
+using ConnectX.Actors;
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Text.Json;
@@ -7,7 +8,6 @@ using ConnectX.Server.Messages.Queries;
 using ConnectX.Server.Models;
 using ConnectX.Server.Models.ZeroTier;
 using ConnectX.Server.Services;
-using ConnectX.Shared.Helpers;
 using ConnectX.Shared.Messages.Group;
 using ConnectX.Shared.Messages.Identity;
 using ConnectX.Shared.Messages.Relay;
@@ -21,7 +21,7 @@ using Microsoft.Extensions.Logging;
 
 namespace ConnectX.Server.Managers;
 
-public class GroupManager
+public partial class GroupManager
 {
     private readonly IZeroTierNodeInfoService? _zeroTierNodeInfoService;
     private readonly RelayServerManager _relayServerManager;
@@ -33,12 +33,16 @@ public class GroupManager
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly ILogger _logger;
 
-    private readonly ConcurrentDictionary<Guid, Group> _groupMappings = new();
-    private readonly ConcurrentDictionary<SessionId, Guid> _sessionIdMapping = new();
-    private readonly ConcurrentDictionary<string, Guid> _shortIdGroupMappings = new();
-    private readonly ConcurrentDictionary<Guid, BasicUserInfo> _userMapping = new();
+    private readonly Dictionary<Guid, Guid> _pendingRoomOperations = [];
+    private readonly Dictionary<Guid, Group> _groupMappings = new();
+    private readonly Dictionary<SessionId, Guid> _sessionIdMapping = new();
+    private readonly Dictionary<string, Guid> _shortIdGroupMappings = new();
+    private readonly Dictionary<Guid, BasicUserInfo> _userMapping = new();
+
+    private readonly ControlPlaneActor _actor;
 
     public GroupManager(
+        ControlPlaneActor actor,
         IDispatcher dispatcher,
         RelayServerManager relayServerManager,
         RelayLoadManager relayLoadManager,
@@ -49,6 +53,7 @@ public class GroupManager
         ILogger<GroupManager> logger,
         IZeroTierNodeInfoService? zeroTierNodeInfoService = null)
     {
+        _actor = actor;
         _zeroTierNodeInfoService = zeroTierNodeInfoService;
         _dispatcher = dispatcher;
         _relayServerManager = relayServerManager;
@@ -61,13 +66,7 @@ public class GroupManager
 
         _clientManager.OnSessionDisconnected += ClientManagerOnSessionDisconnected;
 
-        _dispatcher.AddHandler<CreateGroup>(OnCreateGroupReceived);
-        _dispatcher.AddHandler<JoinGroup>(OnJoinGroupReceived);
-        _dispatcher.AddHandler<LeaveGroup>(OnLeaveGroupReceived);
-        _dispatcher.AddHandler<KickUser>(OnKickUserReceived);
-        _dispatcher.AddHandler<AcquireGroupInfo>(OnAcquireGroupInfoReceived);
-        _dispatcher.AddHandler<UpdateRoomMemberNetworkInfo>(OnUpdateRoomMemberNetworkInfoReceived);
-        _dispatcher.AddHandler<UpdateDisplayNameMessage>(UpdateDisplayNameReceived);
+        RegisterActorHandlers(dispatcher, actor);
     }
 
     /// <summary>
@@ -82,6 +81,7 @@ public class GroupManager
         ISession session,
         SigninMessage signinMessage)
     {
+        _actor.AssertAccess();
         if (!_clientManager.IsSessionAttached(id))
         {
             _logger.LogFailedToAttachSession(id);
@@ -116,11 +116,11 @@ public class GroupManager
         if (_clientManager.IsSessionAttached(session.Id)) return true;
 
         var err = new GroupOpResult(GroupCreationStatus.SessionDetached, "Session does not attached to CM.");
-        dispatcher.SendAsync(session, err).Forget();
+        _actor.Send(dispatcher, session, err);
 
         _logger.LogReceivedGroupOpMessageFromUnattachedSession(session.Id);
 
-        return true;
+        return false;
     }
 
     private bool IsGroupSessionAttached(
@@ -130,7 +130,7 @@ public class GroupManager
         if (_sessionIdMapping.ContainsKey(session.Id)) return true;
 
         var err = new GroupOpResult(GroupCreationStatus.SessionDetached, "Session does not attached to GM.");
-        dispatcher.SendAsync(session, err).Forget();
+        _actor.Send(dispatcher, session, err);
 
         _logger.LogReceivedGroupOpMessageFromUnattachedSession(session.Id);
 
@@ -145,7 +145,7 @@ public class GroupManager
         if (_userMapping.ContainsKey(userId)) return true;
 
         var err = new GroupOpResult(GroupCreationStatus.UserNotExists, "User does not exist.");
-        dispatcher.SendAsync(session, err).Forget();
+        _actor.Send(dispatcher, session, err);
 
         _logger.LogUserDoesNotExist(session.Id);
 
@@ -167,7 +167,7 @@ public class GroupManager
         if (!sendErr) return true;
 
         var err = new GroupOpResult(GroupCreationStatus.AlreadyInRoom, "User is already in a group.");
-        dispatcher.SendAsync(session, err).Forget();
+        _actor.Send(dispatcher, session, err);
 
         _logger.LogUserAlreadyInGroupPerformingGroupOp(session.Id);
 
@@ -178,6 +178,7 @@ public class GroupManager
         QueryRemoteServerRoomInfo query,
         [NotNullWhen(true)] out Group? group)
     {
+        _actor.AssertAccess();
         var groupId = string.IsNullOrEmpty(query.JoinGroup.RoomShortId)
             ? query.JoinGroup.GroupId
             : _shortIdGroupMappings.TryGetValue(query.JoinGroup.RoomShortId, out var id)
@@ -197,42 +198,35 @@ public class GroupManager
         if (dispatcher == null || session == null) return false;
 
         var err = new GroupOpResult(GroupCreationStatus.GroupNotExists, "Group does not exist.");
-        dispatcher.SendAsync(session, err).Forget();
+        _actor.Send(dispatcher, session, err);
 
         _logger.LogGroupDoesNotExist(session.Id);
 
         return false;
     }
 
-    private async Task NotifyGroupMembersAsync<T>(
+    private void NotifyGroupMembers<T>(
         Group group,
         T stateChange)
     {
-        foreach (var member in group.Users)
+        if (stateChange is GroupUserStateChanged change && group.AssignedRelayServer != null &&
+            _relayServerManager.TryGetRelayServerSession(group.AssignedRelayServer, out var relay))
         {
-            await _dispatcher.SendAsync(member.Session, stateChange);
-
-            if (member.RelayServerAddress != null &&
-                _relayServerManager.TryGetRelayServerSession(member.RelayServerAddress, out var relaySession) &&
-                stateChange is GroupUserStateChanged { UserInfo: not null } stateChangedMessage)
+            var subject = change.UserInfo ?? (UserInfo)group.RoomOwner;
+            _actor.Send(_dispatcher, relay, new UpdateRelayUserRoomMappingMessage
             {
-                var relayUpdate = new UpdateRelayUserRoomMappingMessage
-                {
-                    RoomId = group.RoomId,
-                    UserId = stateChangedMessage.UserInfo.UserId,
-                    State = stateChangedMessage.State,
-                    IsGroupOwner = false
-                };
-
-                _dispatcher.SendAsync(relaySession, relayUpdate).Forget();
-            }
+                RoomId = group.RoomId, UserId = subject.UserId, State = change.State,
+                IsGroupOwner = subject.UserId == group.RoomOwner.UserId
+            });
         }
+        foreach (var member in group.Users) _actor.Send(_dispatcher, member.Session, stateChange);
     }
 
     private void ClientManagerOnSessionDisconnected(SessionId sessionId)
     {
-        if (!_sessionIdMapping.TryRemove(sessionId, out var userId)) return;
-        if (!_userMapping.TryRemove(userId, out var user)) return;
+        if (!_sessionIdMapping.Remove(sessionId, out var userId)) return;
+        if (!_userMapping.Remove(userId, out var user)) return;
+        _pendingRoomOperations.Remove(userId);
 
         var group = _groupMappings.Values.FirstOrDefault(g => g.Users.Any(u => u.UserId == user.UserId));
 
@@ -251,19 +245,23 @@ public class GroupManager
             return;
         }
 
-        DeleteGroupNetworkAsync(group).Forget();
-        NotifyGroupMembersAsync(group, new GroupUserStateChanged(GroupUserStates.Dismissed, group.RoomOwner)).Forget();
+        _groupMappings.Remove(group.RoomId);
+        _shortIdGroupMappings.Remove(group.RoomShortId);
+        QueueNetworkDeletion(group.NetworkId);
+        NotifyGroupMembers(group, new GroupUserStateChanged(GroupUserStates.Dismissed, group.RoomOwner));
 
         _logger.LogGroupHasBeenDismissedBy(group.RoomId, sessionId);
     }
 
     public bool TryGetUserId(SessionId sessionId, out Guid userId)
     {
+        _actor.AssertAccess();
         return _sessionIdMapping.TryGetValue(sessionId, out userId);
     }
 
     public bool TryGetUserRoomId(Guid userId, out Guid roomId)
     {
+        _actor.AssertAccess();
         var user = _groupMappings.Values
             .FirstOrDefault(g => g.Users.Any(u => u.UserId == userId));
 
@@ -277,6 +275,7 @@ public class GroupManager
         return true;
     }
 
+    [ActorMessage]
     private void OnUpdateRoomMemberNetworkInfoReceived(MessageContext<UpdateRoomMemberNetworkInfo> ctx)
     {
         if (!IsSessionAttached(ctx.Dispatcher, ctx.FromSession)) return;
@@ -292,7 +291,7 @@ public class GroupManager
         if (user == null)
         {
             var err = new GroupOpResult(GroupCreationStatus.UserNotExists, "User not found");
-            ctx.Dispatcher.SendAsync(ctx.FromSession, err).Forget();
+            _actor.Send(ctx.Dispatcher, ctx.FromSession, err);
             return;
         }
 
@@ -306,26 +305,32 @@ public class GroupManager
         user.NetworkAddresses = ctx.Message.NetworkIpAddresses;
 
         var result = new GroupOpResult(GroupCreationStatus.Succeeded);
-        ctx.Dispatcher.SendAsync(ctx.FromSession, result).Forget();
+        _actor.Send(ctx.Dispatcher, ctx.FromSession, result);
 
         _logger.LogMemberInfoUpdated(userId, ctx.Message);
 
-        NotifyGroupMembersAsync(group, new RoomMemberInfoUpdated { UserInfo = user }).Forget();
+        NotifyGroupMembers(group, new RoomMemberInfoUpdated { UserInfo = user });
     }
 
+    [ActorMessage]
     private void OnCreateGroupReceived(MessageContext<CreateGroup> ctx)
     {
         if (!IsSessionAttached(ctx.Dispatcher, ctx.FromSession)) return;
         if (!IsGroupSessionAttached(ctx.Dispatcher, ctx.FromSession)) return;
         if (!TryGetUserId(ctx.FromSession.Id, out var userId)) return;
         if (!HasUserMapping(userId, ctx.Dispatcher, ctx.FromSession)) return;
+        if (_pendingRoomOperations.ContainsKey(userId))
+        {
+            _actor.Send(ctx.Dispatcher, ctx.FromSession, new GroupOpResult(GroupCreationStatus.Other, "A room operation is already pending."));
+            return;
+        }
         if (IsAlreadyInGroup(userId, ctx.Dispatcher, ctx.FromSession)) return;
 
-        CreateRoomAsync(userId, ctx).Forget();
+        BeginCreateRoom(userId, ctx);
     }
 
     private IPEndPoint? TryAssignRelayServerAddress<T>(Guid userId, MessageContext<T> ctx)
-    {        
+    {
         if (!_relayLoadManager.TryGetMostAvailableRelaySession(out var sessionId))
         {
             _logger.LogFailedToGetRelayServerAddress();
@@ -338,34 +343,51 @@ public class GroupManager
             return null;
         }
 
-        ctx.Dispatcher.SendAsync(ctx.FromSession, new RelayServerAddressAssignedMessage(userId, relayServerAddress)).Forget();
+        _actor.Send(ctx.Dispatcher, ctx.FromSession, new RelayServerAddressAssignedMessage(userId, relayServerAddress));
 
         _logger.LogRelayServerAddressAssigned(userId, relayServerAddress);
 
         return relayServerAddress;
     }
 
-    private async Task CreateRoomAsync(Guid userId, MessageContext<CreateGroup> ctx)
+    private void BeginCreateRoom(Guid userId, MessageContext<CreateGroup> ctx)
     {
-        NetworkDetailsModel? networkDetail = null;
-
-        if (!ctx.Message.UseRelayServer)
+        var operation = Guid.NewGuid();
+        if (!_pendingRoomOperations.TryAdd(userId, operation))
         {
-            // Room owner asked to not use relay server, so we need to create a virtual network for the group.
-            if (_zeroTierNodeInfoService?.NodeStatus == null)
-            {
-                var err = new GroupOpResult(GroupCreationStatus.NetworkControllerNotReady,
-                    _zeroTierNodeInfoService == null
-                        ? "ZeroTier is disabled on this server; use a relay room."
-                        : "ZeroTier network controller is not ready.");
-                ctx.Dispatcher.SendAsync(ctx.FromSession, err).Forget();
-                return;
-            }
+            _actor.Send(ctx.Dispatcher, ctx.FromSession, new GroupOpResult(GroupCreationStatus.Other, "A room operation is already pending."));
+            return;
+        }
+        if (ctx.Message.UseRelayServer)
+        {
+            CompleteCreateRoom(userId, operation, ctx, null, null);
+            return;
+        }
+        var nodeAddress = _zeroTierNodeInfoService?.NodeStatus?.Address;
+        if (nodeAddress == null)
+        {
+            _pendingRoomOperations.Remove(userId);
+            _actor.Send(ctx.Dispatcher, ctx.FromSession, new GroupOpResult(GroupCreationStatus.NetworkControllerNotReady,
+                _zeroTierNodeInfoService == null ? "ZeroTier is disabled on this server; use a relay room." : "ZeroTier network controller is not ready."));
+            return;
+        }
+        if (!_actor.RunEffect(async token =>
+        {
+            NetworkDetailsModel? network = null;
+            string? error = null;
+            try { network = await CreateNetworkAsync(ctx.Message, nodeAddress, token); }
+            catch (Exception exception) { error = exception.Message; }
+            await _actor.InvokeAsync(() => CompleteCreateRoom(userId, operation, ctx, network, error));
+        }))
+            CompleteCreateRoom(userId, operation, ctx, null, "Too many external operations; try again.");
+    }
 
-            var networkId = $"{_zeroTierNodeInfoService.NodeStatus.Address}______";
+    private async Task<NetworkDetailsModel?> CreateNetworkAsync(CreateGroup message, string nodeAddress, CancellationToken token)
+    {
+        var networkId = $"{nodeAddress}______";
             var networkCreationReq = new NetworkDetailsReqModel
             {
-                Name = GuidHelper.Hash($"GROUP: {ctx.Message.RoomName}{DateTime.Now.ToFileTimeUtc()}").ToString("N"),
+                Name = GuidHelper.Hash($"GROUP: {message.RoomName}{DateTime.Now.ToFileTimeUtc()}").ToString("N"),
                 EnableBroadcast = true,
                 IpAssignmentPools =
                 [
@@ -389,35 +411,30 @@ public class GroupManager
                 MulticastLimit = 32
             };
 
-            try
-            {
-                using var ct = new CancellationTokenSource(TimeSpan.FromMinutes(5));
-                await using var scope = IZeroTierNodeInfoService.CreateZtApi(_serviceScopeFactory, out var zeroTierApiService);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeout.CancelAfter(TimeSpan.FromSeconds(30));
+        await using var scope = IZeroTierNodeInfoService.CreateZtApi(_serviceScopeFactory, out var api);
+        return await api.CreateOrUpdateNetwork(networkId, networkCreationReq, timeout.Token)
+            ?? throw new InvalidOperationException("Network controller returned no network.");
+    }
 
-                networkDetail = await zeroTierApiService.CreateOrUpdateNetwork(networkId, networkCreationReq, ct.Token);
-
-                ArgumentNullException.ThrowIfNull(networkDetail);
-
-                _logger.LogNewNetworkCreated(networkDetail.Id);
-            }
-            catch (ArgumentNullException)
-            {
-                _logger.LogFailedToCreateNetwork("Network detail is null.");
-
-                var err = new GroupOpResult(GroupCreationStatus.NetworkControllerError);
-                ctx.Dispatcher.SendAsync(ctx.FromSession, err).Forget();
-                return;
-            }
-            catch (HttpRequestException e)
-            {
-                _logger.LogFailedToCreateNetwork(e.ToString());
-
-                var err = new GroupOpResult(GroupCreationStatus.NetworkControllerError, e.ToString());
-                ctx.Dispatcher.SendAsync(ctx.FromSession, err).Forget();
-                return;
-            }
+    private void CompleteCreateRoom(Guid userId, Guid operation, MessageContext<CreateGroup> ctx,
+        NetworkDetailsModel? networkDetail, string? error)
+    {
+        _actor.AssertAccess();
+        if (!_pendingRoomOperations.TryGetValue(userId, out var current) || current != operation ||
+            !_userMapping.TryGetValue(userId, out var currentUser) || !ReferenceEquals(currentUser.Session, ctx.FromSession) ||
+            !_clientManager.IsSessionAttached(ctx.FromSession.Id) || IsAlreadyInGroup(userId, ctx.Dispatcher, ctx.FromSession, false))
+        {
+            if (networkDetail != null) QueueNetworkDeletion(Convert.ToUInt64(networkDetail.Id, 16));
+            return;
         }
-
+        _pendingRoomOperations.Remove(userId);
+        if (error != null)
+        {
+            _actor.Send(ctx.Dispatcher, ctx.FromSession, new GroupOpResult(GroupCreationStatus.NetworkControllerError, error));
+            return;
+        }
         var message = ctx.Message;
         var owner = _userMapping[userId];
         var assignedRelayServerAddress = ctx.Message.UseRelayServer
@@ -425,7 +442,7 @@ public class GroupManager
             : null;
         if (ctx.Message.UseRelayServer && assignedRelayServerAddress == null)
         {
-            await ctx.Dispatcher.SendAsync(ctx.FromSession,
+            _actor.Send(ctx.Dispatcher, ctx.FromSession,
                 new GroupOpResult(GroupCreationStatus.Other, "No relay server is available."));
             return;
         }
@@ -441,6 +458,20 @@ public class GroupManager
             AssignedRelayServer = assignedRelayServerAddress
         };
 
+        if (!_groupMappings.TryAdd(group.RoomId, group) ||
+            !_shortIdGroupMappings.TryAdd(group.RoomShortId, group.RoomId))
+        {
+            _groupMappings.Remove(group.RoomId);
+            _shortIdGroupMappings.Remove(group.RoomShortId);
+            QueueNetworkDeletion(group.NetworkId);
+            var err = new GroupOpResult(GroupCreationStatus.InternalError, "Failed to add group to the group mapping.");
+            _actor.Send(ctx.Dispatcher, ctx.FromSession, err);
+
+            _logger.LogFailedToAddGroupToGroupMapping(ctx.FromSession.Id);
+
+            return;
+        }
+
         if (assignedRelayServerAddress != null &&
             _relayServerManager.TryGetRelayServerSession(assignedRelayServerAddress, out var relaySession))
         {
@@ -452,18 +483,7 @@ public class GroupManager
                 IsGroupOwner = true
             };
 
-            _dispatcher.SendAsync(relaySession, relayUpdate).Forget();
-        }
-
-        if (!_groupMappings.TryAdd(group.RoomId, group) ||
-            !_shortIdGroupMappings.TryAdd(group.RoomShortId, group.RoomId))
-        {
-            var err = new GroupOpResult(GroupCreationStatus.InternalError, "Failed to add group to the group mapping.");
-            ctx.Dispatcher.SendAsync(ctx.FromSession, err).Forget();
-
-            _logger.LogFailedToAddGroupToGroupMapping(ctx.FromSession.Id);
-
-            return;
+            _actor.Send(_dispatcher, relaySession, relayUpdate);
         }
 
         var metadata = new Dictionary<string, string>(1)
@@ -479,7 +499,7 @@ public class GroupManager
             RoomId = group.RoomId
         };
 
-        ctx.Dispatcher.SendAsync(ctx.FromSession, success).Forget();
+        _actor.Send(ctx.Dispatcher, ctx.FromSession, success);
 
         _logger.LogGroupCreated(ctx.FromSession.Id, group.RoomName, group.RoomShortId);
 
@@ -496,14 +516,39 @@ public class GroupManager
         _roomCreationRecordService.CreateRecord(creationRecord);
     }
 
-    private async Task TryGetRoomInfoFromRemoteServerAsync(MessageContext<JoinGroup> ctx)
+    private void BeginRemoteRoomQuery(Guid userId, MessageContext<JoinGroup> ctx)
     {
-        var fetchRemoteRoomInfo = await _interconnectServerManager.TryFindTargetRemoteServerForRoomAsync(ctx.Message);
+        var operation = Guid.NewGuid();
+        if (!_pendingRoomOperations.TryAdd(userId, operation)) return;
+        var servers = _interconnectServerManager.GetRegisteredServers();
+        if (!_actor.RunEffect(async token =>
+        {
+            InterconnectServerRegistration? found = null;
+            try { found = await _interconnectServerManager.FindRemoteRoomAsync(ctx.Message, servers, token); }
+            finally
+            {
+                await _actor.InvokeAsync(() =>
+                {
+                    if (!_pendingRoomOperations.TryGetValue(userId, out var current) || current != operation) return;
+                    _pendingRoomOperations.Remove(userId);
+                    if (!_userMapping.TryGetValue(userId, out var user) || !ReferenceEquals(user.Session, ctx.FromSession) ||
+                        IsAlreadyInGroup(userId, ctx.Dispatcher, ctx.FromSession, false)) return;
+                    CompleteRemoteRoomQuery(ctx, found);
+                });
+            }
+        }))
+        {
+            _pendingRoomOperations.Remove(userId);
+            _actor.Send(ctx.Dispatcher, ctx.FromSession, new GroupOpResult(GroupCreationStatus.Other, "Too many external operations; try again."));
+        }
+    }
 
+    private void CompleteRemoteRoomQuery(MessageContext<JoinGroup> ctx, InterconnectServerRegistration? fetchRemoteRoomInfo)
+    {
         if (fetchRemoteRoomInfo == null)
         {
             var err = new GroupOpResult(GroupCreationStatus.GroupNotExists, "Group does not exist.");
-            ctx.Dispatcher.SendAsync(ctx.FromSession, err).Forget();
+            _actor.Send(ctx.Dispatcher, ctx.FromSession, err);
 
             _logger.LogGroupDoesNotExist(ctx.FromSession.Id);
 
@@ -522,17 +567,23 @@ public class GroupManager
             null,
             metadata);
 
-        ctx.Dispatcher.SendAsync(ctx.FromSession, redirectMsg).Forget();
+        _actor.Send(ctx.Dispatcher, ctx.FromSession, redirectMsg);
 
         _logger.LogRedirectMessageSent(fetchRemoteRoomInfo);
     }
 
+    [ActorMessage]
     private void OnJoinGroupReceived(MessageContext<JoinGroup> ctx)
     {
         if (!IsSessionAttached(ctx.Dispatcher, ctx.FromSession)) return;
         if (!IsGroupSessionAttached(ctx.Dispatcher, ctx.FromSession)) return;
         if (!TryGetUserId(ctx.FromSession.Id, out var userId)) return;
         if (!HasUserMapping(userId, ctx.Dispatcher, ctx.FromSession)) return;
+        if (_pendingRoomOperations.ContainsKey(userId))
+        {
+            _actor.Send(ctx.Dispatcher, ctx.FromSession, new GroupOpResult(GroupCreationStatus.Other, "A room operation is already pending."));
+            return;
+        }
         if (IsAlreadyInGroup(_sessionIdMapping[ctx.FromSession.Id], ctx.Dispatcher, ctx.FromSession)) return;
 
         var message = ctx.Message;
@@ -544,15 +595,15 @@ public class GroupManager
 
         if (!_groupMappings.TryGetValue(groupId, out var group))
         {
-            TryGetRoomInfoFromRemoteServerAsync(ctx).Forget();
+            BeginRemoteRoomQuery(userId, ctx);
             return;
         }
 
         if (group.MaxUserCount != 0 &&
-            group.MaxUserCount == group.Users.Count)
+            group.Users.Count >= group.MaxUserCount)
         {
             var err = new GroupOpResult(GroupCreationStatus.GroupIsFull, "Group is full.");
-            ctx.Dispatcher.SendAsync(ctx.FromSession, err).Forget();
+            _actor.Send(ctx.Dispatcher, ctx.FromSession, err);
 
             _logger.LogGroupIsFull(ctx.FromSession.Id, groupId);
 
@@ -563,7 +614,7 @@ public class GroupManager
             group.RoomPassword != message.RoomPassword)
         {
             var err = new GroupOpResult(GroupCreationStatus.PasswordIncorrect, "Wrong password.");
-            ctx.Dispatcher.SendAsync(ctx.FromSession, err).Forget();
+            _actor.Send(ctx.Dispatcher, ctx.FromSession, err);
 
             _logger.LogWrongPassword(ctx.FromSession.Id, groupId);
 
@@ -577,7 +628,7 @@ public class GroupManager
             var err = new GroupOpResult(
                 GroupCreationStatus.Other,
                 "This room requires a direct-network capable client.");
-            ctx.Dispatcher.SendAsync(ctx.FromSession, err).Forget();
+            _actor.Send(ctx.Dispatcher, ctx.FromSession, err);
 
             _logger.LogDirectRoomRejectedForRelayOnlyClient(ctx.FromSession.Id, groupId);
             return;
@@ -610,7 +661,7 @@ public class GroupManager
         var info = new UserSessionInfo(user, assignedRelayServerAddress);
 
         group.Users.Add(info);
-        NotifyGroupMembersAsync(group, new GroupUserStateChanged(GroupUserStates.Joined, info)).Forget();
+        NotifyGroupMembers(group, new GroupUserStateChanged(GroupUserStates.Joined, info));
 
         var metadata = new Dictionary<string, string>(1)
         {
@@ -622,7 +673,7 @@ public class GroupManager
             null,
             metadata) { RoomId = group.RoomId };
 
-        ctx.Dispatcher.SendAsync(ctx.FromSession, success).Forget();
+        _actor.Send(ctx.Dispatcher, ctx.FromSession, success);
 
         _logger.LogUserJoinedGroup(ctx.FromSession.Id, group.RoomName, group.RoomShortId);
     }
@@ -643,65 +694,42 @@ public class GroupManager
         group.Users.Remove(user);
 
         if (state == GroupUserStates.Kicked) // 通知被踢客户端
-            _dispatcher.SendAsync(user.Session, new GroupUserStateChanged(state, user)).Forget();
+            _actor.Send(_dispatcher, user.Session, new GroupUserStateChanged(state, user));
 
-        DeleteGroupNetworkMemberAsync(group, user).Forget();
-        NotifyGroupMembersAsync(group, new GroupUserStateChanged(state, user)).Forget();
+        QueueMemberDeletion(group.NetworkId, user.NetworkNodeId);
+        NotifyGroupMembers(group, new GroupUserStateChanged(state, user));
     }
 
-    private async Task DeleteGroupNetworkAsync(Group group)
+    private void QueueNetworkDeletion(ulong networkId) => QueueDeletion(networkId, null);
+    private void QueueMemberDeletion(ulong networkId, string? nodeId)
     {
-        if (_zeroTierNodeInfoService == null || group.NetworkId == 0)
-            return;
-
-        try
-        {
-            var networkId = group.NetworkId.ToString("X").ToLowerInvariant();
-
-            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
-            await using var scope = IZeroTierNodeInfoService.CreateZtApi(_serviceScopeFactory, out var zeroTierApiService);
-
-            await zeroTierApiService.DeleteNetworkAsync(networkId, cts.Token);
-
-            _logger.LogNetworkDeleted(networkId);
-        }
-        catch (HttpRequestException e)
-        {
-            if (e.StatusCode == HttpStatusCode.NotFound) return;
-
-            _logger.LogFailedToDeleteNetwork(e.ToString());
-        }
+        if (!string.IsNullOrEmpty(nodeId)) QueueDeletion(networkId, nodeId);
     }
-
-    private async Task DeleteGroupNetworkMemberAsync(Group group, UserInfo user)
+    private void QueueDeletion(ulong networkId, string? nodeId)
     {
-        if (_zeroTierNodeInfoService == null || group.NetworkId == 0 || string.IsNullOrEmpty(user.NetworkNodeId))
-            return;
-
-        try
+        if (_zeroTierNodeInfoService == null || networkId == 0) return;
+        if (!_actor.RunEffect(async token =>
         {
-            var networkId = group.NetworkId.ToString("X").ToLowerInvariant();
-
-            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
-            await using var scope = IZeroTierNodeInfoService.CreateZtApi(_serviceScopeFactory, out var zeroTierApiService);
-
-            await zeroTierApiService.DeleteNetworkMemberAsync(networkId, user.NetworkNodeId, cts.Token);
-
-            _logger.LogNetworkMemberDeleted(networkId);
-        }
-        catch (HttpRequestException e)
-        {
-            if (e.StatusCode == HttpStatusCode.NotFound) return;
-
-            _logger.LogFailedToDeleteNetworkMember(e.ToString());
-        }
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+            timeout.CancelAfter(TimeSpan.FromSeconds(30));
+            await using var scope = IZeroTierNodeInfoService.CreateZtApi(_serviceScopeFactory, out var api);
+            var id = networkId.ToString("x");
+            try
+            {
+                if (nodeId == null) await api.DeleteNetworkAsync(id, timeout.Token);
+                else await api.DeleteNetworkMemberAsync(id, nodeId, timeout.Token);
+            }
+            catch (HttpRequestException exception) when (exception.StatusCode == HttpStatusCode.NotFound) { }
+        })) _logger.LogFailedToDeleteNetwork("External operation capacity exhausted.");
     }
 
+    [ActorMessage]
     private void OnLeaveGroupReceived(MessageContext<LeaveGroup> ctx)
     {
         if (!IsSessionAttached(ctx.Dispatcher, ctx.FromSession)) return;
         if (!IsGroupSessionAttached(ctx.Dispatcher, ctx.FromSession)) return;
         if (!TryGetUserId(ctx.FromSession.Id, out var userId)) return;
+        _pendingRoomOperations.Remove(userId);
         if (!TryGetUserRoomId(userId, out var groupId)) return;
         if (!HasUserMapping(userId, ctx.Dispatcher, ctx.FromSession)) return;
         if (!IsAlreadyInGroup(_sessionIdMapping[ctx.FromSession.Id], ctx.Dispatcher, ctx.FromSession, false)) return;
@@ -711,11 +739,12 @@ public class GroupManager
 
         if (group.RoomOwner.UserId == userId)
         {
-            ctx.Dispatcher.SendAsync(ctx.FromSession, success).Forget();
+            _actor.Send(ctx.Dispatcher, ctx.FromSession, success);
 
-            _groupMappings.TryRemove(group.RoomId, out _);
-            DeleteGroupNetworkAsync(group).Forget();
-            NotifyGroupMembersAsync(group, new GroupUserStateChanged(GroupUserStates.Dismissed, null)).Forget();
+            _groupMappings.Remove(group.RoomId, out _);
+            _shortIdGroupMappings.Remove(group.RoomShortId);
+            QueueNetworkDeletion(group.NetworkId);
+            NotifyGroupMembers(group, new GroupUserStateChanged(GroupUserStates.Dismissed, null));
 
             _logger.LogGroupHasBeenDismissedBy(groupId, ctx.FromSession.Id);
 
@@ -724,11 +753,12 @@ public class GroupManager
 
         RemoveUser(groupId, userId, ctx.Dispatcher, ctx.FromSession, GroupUserStates.Left);
 
-        ctx.Dispatcher.SendAsync(ctx.FromSession, success).Forget();
+        _actor.Send(ctx.Dispatcher, ctx.FromSession, success);
 
         _logger.LogUserLeftGroup(ctx.FromSession.Id, group.RoomName, group.RoomShortId);
     }
 
+    [ActorMessage]
     private void OnKickUserReceived(MessageContext<KickUser> ctx)
     {
         if (!IsSessionAttached(ctx.Dispatcher, ctx.FromSession)) return;
@@ -752,7 +782,7 @@ public class GroupManager
             _logger.LogRoomOwnerTryingToKickSelf(ctx.FromSession.Id.Id, userId, groupId);
 
             var error = new GroupOpResult(GroupCreationStatus.Other, "You can not kick yourself!");
-            ctx.Dispatcher.SendAsync(ctx.FromSession, error).Forget();
+            _actor.Send(ctx.Dispatcher, ctx.FromSession, error);
 
             return;
         }
@@ -760,11 +790,12 @@ public class GroupManager
         RemoveUser(groupId, message.UserToKick, ctx.Dispatcher, ctx.FromSession, GroupUserStates.Kicked);
 
         var success = new GroupOpResult(GroupCreationStatus.Succeeded);
-        ctx.Dispatcher.SendAsync(ctx.FromSession, success).Forget();
+        _actor.Send(ctx.Dispatcher, ctx.FromSession, success);
 
         _logger.LogUserHasBeenKickedFromGroup(ctx.FromSession.Id, group.RoomName, group.RoomShortId);
     }
 
+    [ActorMessage]
     private void OnAcquireGroupInfoReceived(MessageContext<AcquireGroupInfo> ctx)
     {
         var session = ctx.FromSession;
@@ -775,7 +806,7 @@ public class GroupManager
             !TryGetUserRoomId(userId, out var groupId) ||
             !_groupMappings.TryGetValue(groupId, out var group))
         {
-            ctx.Dispatcher.SendAsync(session, GroupInfo.Invalid).Forget();
+            _actor.Send(ctx.Dispatcher, session, GroupInfo.Invalid);
             return;
         }
 
@@ -783,16 +814,17 @@ public class GroupManager
 
         if (isInGroup)
         {
-            ctx.Dispatcher.SendAsync(session, (GroupInfo)group).Forget();
+            _actor.Send(ctx.Dispatcher, session, (GroupInfo)group);
             return;
         }
 
         // Not in group, send group info with empty user info
 
         var groupWithEmptyUserInfo = (GroupInfo)group with { Users = [] };
-        ctx.Dispatcher.SendAsync(session, groupWithEmptyUserInfo).Forget();
+        _actor.Send(ctx.Dispatcher, session, groupWithEmptyUserInfo);
     }
 
+    [ActorMessage]
     private void UpdateDisplayNameReceived(MessageContext<UpdateDisplayNameMessage> ctx)
     {
         var session = ctx.FromSession;
@@ -827,7 +859,7 @@ public class GroupManager
             group.Users.Remove(user);
             group.Users.Add(updatedUser);
 
-            NotifyGroupMembersAsync(group, new GroupUserStateChanged(GroupUserStates.InfoUpdated, updatedUser)).Forget();
+            NotifyGroupMembers(group, new GroupUserStateChanged(GroupUserStates.InfoUpdated, updatedUser));
         }
 
         var oldName = basicUserInfo.DisplayName;
@@ -837,8 +869,15 @@ public class GroupManager
         _logger.LogUserDisplayNameUpdated(userId, oldName, ctx.Message.DisplayName);
     }
 
+    public GroupInfo? GetGroupSnapshot(Guid groupId)
+    {
+        _actor.AssertAccess();
+        return _groupMappings.TryGetValue(groupId, out var group) ? (GroupInfo)group : null;
+    }
+
     public bool TryGetGroup(Guid groupId, [NotNullWhen(true)] out Group? group)
     {
+        _actor.AssertAccess();
         return _groupMappings.TryGetValue(groupId, out group);
     }
 }
@@ -886,23 +925,8 @@ internal static partial class GroupManagerLoggers
         Guid userId,
         Guid groupId);
 
-    [LoggerMessage(LogLevel.Information, "[GROUP_MANAGER] New network created, id: 0x{id}.")]
-    public static partial void LogNewNetworkCreated(this ILogger logger, string id);
-
-    [LoggerMessage(LogLevel.Error, "[GROUP_MANAGER] Failed to create new network, {message}.")]
-    public static partial void LogFailedToCreateNetwork(this ILogger logger, string message);
-
-    [LoggerMessage(LogLevel.Information, "[GROUP_MANAGER] Network deleted, id: {id}.")]
-    public static partial void LogNetworkDeleted(this ILogger logger, string id);
-
     [LoggerMessage(LogLevel.Error, "[GROUP_MANAGER] Failed to delete network, {message}.")]
     public static partial void LogFailedToDeleteNetwork(this ILogger logger, string message);
-
-    [LoggerMessage(LogLevel.Information, "[GROUP_MANAGER] Network member deleted, id: {id}.")]
-    public static partial void LogNetworkMemberDeleted(this ILogger logger, string id);
-
-    [LoggerMessage(LogLevel.Error, "[GROUP_MANAGER] Failed to delete network member, {message}.")]
-    public static partial void LogFailedToDeleteNetworkMember(this ILogger logger, string message);
 
     [LoggerMessage(LogLevel.Warning,
         "[GROUP_MANAGER] Failed to add group to the group mapping, session id: 0x{sessionId}")]
