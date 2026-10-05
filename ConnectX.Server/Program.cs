@@ -1,4 +1,4 @@
-﻿using ConnectX.Server.Interfaces;
+using ConnectX.Server.Interfaces;
 using ConnectX.Server.Managers;
 using ConnectX.Server.Models.Contexts;
 using ConnectX.Server.Services;
@@ -32,12 +32,6 @@ internal static class Program
                 else o.UseSqlServer(connectionString, b => b.MigrationsAssembly("ConnectX.Server"));
             });
 
-            services.AddHttpClient<IZeroTierApiService, ZeroTierApiService>(client =>
-            {
-                client.BaseAddress = new Uri(configuration["ZeroTier:EndPoint"]!);
-                client.DefaultRequestHeaders.Add("X-ZT1-AUTH", configuration["ZeroTier:Token"]);
-            });
-
             services.AddSingleton<IServerSettingProvider, ConfigSettingProvider>();
             services.AddSingleton<IInterconnectServerSettingProvider, InterconnectServerSettingProvider>();
 
@@ -53,14 +47,20 @@ internal static class Program
 
             services.AddHostedService<InterconnectServerLinkHolder>();
 
-            services.AddSingleton<IZeroTierNodeInfoService, ZeroTierNodeInfoService>();
-            services.AddHostedService(sc => sc.GetRequiredService<IZeroTierNodeInfoService>());
-
-            services.AddSingleton<PeerInfoService>();
-            services.AddHostedService(sc => sc.GetRequiredService<PeerInfoService>());
-
-            services.AddSingleton<RoomJoinRecordService>();
-            services.AddHostedService(sc => sc.GetRequiredService<RoomJoinRecordService>());
+            if (configuration.GetValue("ZeroTier:Enabled", true))
+            {
+                services.AddHttpClient<IZeroTierApiService, ZeroTierApiService>(client =>
+                {
+                    client.BaseAddress = new Uri(configuration["ZeroTier:EndPoint"]!);
+                    client.DefaultRequestHeaders.Add("X-ZT1-AUTH", configuration["ZeroTier:Token"]);
+                });
+                services.AddSingleton<IZeroTierNodeInfoService, ZeroTierNodeInfoService>();
+                services.AddHostedService(sc => sc.GetRequiredService<IZeroTierNodeInfoService>());
+                services.AddSingleton<PeerInfoService>();
+                services.AddHostedService(sc => sc.GetRequiredService<PeerInfoService>());
+                services.AddSingleton<RoomJoinRecordService>();
+                services.AddHostedService(sc => sc.GetRequiredService<RoomJoinRecordService>());
+            }
 
             services.AddSingleton<RoomCreationRecordService>();
             services.AddHostedService(sc => sc.GetRequiredService<RoomCreationRecordService>());
@@ -70,6 +70,10 @@ internal static class Program
         });
 
         var app = builder.Build();
+
+        // Initialize before hosted record services start concurrently (.NET 10).
+        using (var scope = app.Services.CreateScope())
+            scope.ServiceProvider.GetRequiredService<RoomOpsHistoryContext>().Database.EnsureCreated();
 
         app.Run();
     }

@@ -36,7 +36,11 @@ services.AddDbContext<RoomOpsHistoryContext>(o =>
 
 ### 部署 Zerotier 服务
 
-`ConnectX.Server` 需要 `Zerotier 控制器` 前置服务
+`ZeroTier:Enabled` 默认为 `true`（省略该项也保留旧行为），此模式需要 `Zerotier 控制器`。
+
+仅使用 TCP Relay 时，设置 `ZeroTier:Enabled` 为 `false`，可以跳过本节，不需要安装 ZeroTier，也不需要填写 `EndPoint` / `Token`。服务端不注册 ZeroTier API、节点检查或 Peer 轮询服务；客户端应创建 Relay 房间。请求创建直连房间会收到 `NetworkControllerNotReady` 和明确的禁用说明。Relay 房间退出/销毁不会访问控制器；无可用 Relay 时建房会返回错误。
+
+后续启用 ZeroTier 时，恢复 `Enabled: true` 并配置控制器地址和 Token，然后重启服务。
 
 1. 安装 Zerotier
 
@@ -114,4 +118,16 @@ Windows 下 Zerotier 的数据文件夹在 `C:\ProgramData\ZeroTier\One` 目录�
 
 `ConnectX.Server` 以及 `ConnectX.Relay` 的守护进程等配置在此不再过多赘述  
 
-使用 `ConnectX.Client` 连接时请使用 `ConnectX.Server` 的公网地址和端口进行连接  
+使用 `ConnectX.Client` 连接时请使用 `ConnectX.Server` 的公网地址和端口进行连接
+
+### Relay-only 部署验收
+
+先使用 `ZeroTier:Enabled=false` 启动 Server，但不启动 Relay，执行以下测试，验证登录成功、直连建房被拒绝、Relay 缺席时建房被拒绝：
+
+```sh
+dotnet run --project tools/DeploymentProbe -- 127.0.0.1 <Relay公网IP> --no-relay
+```
+
+启动 Relay 并确认成功注册后，移除 `--no-relay` 再执行，验证两个客户端登录、Relay 房间创建/加入、广播的 Relay 地址、TCP 数据转发和退出/销毁。也可以从另一台机器将第一个参数换成 Server 公网 IP，验证公网端口可达。测试会创建一个私有临时房间，成功后自动退出；异常退出后由服务端清理断开的会话。
+
+服务端入口域名需解析到 Server 的公网 IPv4，LauncherX 默认使用 `connectx.corona.studio:3535`；Relay 广播自身的公网 IPv4 和 `3536` 端口。仅 Relay 模式需要放行 TCP 3535/3536。Cloudflare 常规橙云代理不支持该自定义 TCP 协议，需使用 DNS only，或另行配置支持自定义 TCP 的 Spectrum。

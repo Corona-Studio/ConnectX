@@ -7,7 +7,6 @@ public sealed class RoomOpsHistoryContext : DbContext
 {
     public RoomOpsHistoryContext(DbContextOptions<RoomOpsHistoryContext> option) : base(option)
     {
-        Database.EnsureCreated();
     }
 
     public DbSet<RoomCreateHistory> RoomCreateHistories { get; set; }

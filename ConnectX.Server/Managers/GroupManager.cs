@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Text.Json;
@@ -23,7 +23,7 @@ namespace ConnectX.Server.Managers;
 
 public class GroupManager
 {
-    private readonly IZeroTierNodeInfoService _zeroTierNodeInfoService;
+    private readonly IZeroTierNodeInfoService? _zeroTierNodeInfoService;
     private readonly RelayServerManager _relayServerManager;
     private readonly RelayLoadManager _relayLoadManager;
     private readonly ClientManager _clientManager;
@@ -39,7 +39,6 @@ public class GroupManager
     private readonly ConcurrentDictionary<Guid, BasicUserInfo> _userMapping = new();
 
     public GroupManager(
-        IZeroTierNodeInfoService zeroTierNodeInfoService,
         IDispatcher dispatcher,
         RelayServerManager relayServerManager,
         RelayLoadManager relayLoadManager,
@@ -47,7 +46,8 @@ public class GroupManager
         RoomCreationRecordService roomCreationRecordService,
         InterconnectServerManager interconnectServerManager,
         IServiceScopeFactory serviceScopeFactory,
-        ILogger<GroupManager> logger)
+        ILogger<GroupManager> logger,
+        IZeroTierNodeInfoService? zeroTierNodeInfoService = null)
     {
         _zeroTierNodeInfoService = zeroTierNodeInfoService;
         _dispatcher = dispatcher;
@@ -352,9 +352,12 @@ public class GroupManager
         if (!ctx.Message.UseRelayServer)
         {
             // Room owner asked to not use relay server, so we need to create a virtual network for the group.
-            if (_zeroTierNodeInfoService.NodeStatus == null)
+            if (_zeroTierNodeInfoService?.NodeStatus == null)
             {
-                var err = new GroupOpResult(GroupCreationStatus.NetworkControllerNotReady);
+                var err = new GroupOpResult(GroupCreationStatus.NetworkControllerNotReady,
+                    _zeroTierNodeInfoService == null
+                        ? "ZeroTier is disabled on this server; use a relay room."
+                        : "ZeroTier network controller is not ready.");
                 ctx.Dispatcher.SendAsync(ctx.FromSession, err).Forget();
                 return;
             }
@@ -420,6 +423,13 @@ public class GroupManager
         var assignedRelayServerAddress = ctx.Message.UseRelayServer
             ? TryAssignRelayServerAddress(userId, ctx)
             : null;
+        if (ctx.Message.UseRelayServer && assignedRelayServerAddress == null)
+        {
+            await ctx.Dispatcher.SendAsync(ctx.FromSession,
+                new GroupOpResult(GroupCreationStatus.Other, "No relay server is available."));
+            return;
+        }
+
         var ownerSession = new UserSessionInfo(owner, assignedRelayServerAddress);
 
         var group = new Group(message.RoomName, message.RoomPassword, ownerSession, [ownerSession])
@@ -641,6 +651,9 @@ public class GroupManager
 
     private async Task DeleteGroupNetworkAsync(Group group)
     {
+        if (_zeroTierNodeInfoService == null || group.NetworkId == 0)
+            return;
+
         try
         {
             var networkId = group.NetworkId.ToString("X").ToLowerInvariant();
@@ -662,7 +675,7 @@ public class GroupManager
 
     private async Task DeleteGroupNetworkMemberAsync(Group group, UserInfo user)
     {
-        if (string.IsNullOrEmpty(user.NetworkNodeId))
+        if (_zeroTierNodeInfoService == null || group.NetworkId == 0 || string.IsNullOrEmpty(user.NetworkNodeId))
             return;
 
         try
