@@ -1,6 +1,6 @@
-﻿namespace ConnectX.Client.Models;
+namespace ConnectX.Client.Models;
 
-public class PacketContext(Guid senderId)
+public readonly struct PacketContext(Guid senderId)
 {
     public Guid SenderId { get; } = senderId;
 }

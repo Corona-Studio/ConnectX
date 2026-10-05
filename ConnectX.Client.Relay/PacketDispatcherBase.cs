@@ -26,7 +26,8 @@ public abstract class PacketDispatcherBase<TInPacket>
         lock (ReceiveCallbackDic)
         {
             if (!ReceiveCallbackDic.ContainsKey(typeof(T))) ReceiveCallbackDic.Add(typeof(T), new CallbackWarp());
-            ReceiveCallbackDic[typeof(T)].UniformCallback.Add(new ReceiveCallback<T>(callback));
+            var callbacks = ReceiveCallbackDic[typeof(T)];
+            callbacks.UniformCallback = [.. callbacks.UniformCallback, new ReceiveCallback<T>(callback)];
         }
     }
 
@@ -36,10 +37,13 @@ public abstract class PacketDispatcherBase<TInPacket>
         {
             if (!ReceiveCallbackDic.TryGetValue(typeof(T), out var callbacks)) return false;
 
-            var index = callbacks.UniformCallback.FindIndex(x => x.Original.Equals(callback));
+            var index = Array.FindIndex(callbacks.UniformCallback, x => x.Original.Equals(callback));
             if (index < 0) return false;
 
-            callbacks.UniformCallback.RemoveAt(index);
+            var updated = new IReceiveCallback[callbacks.UniformCallback.Length - 1];
+            Array.Copy(callbacks.UniformCallback, 0, updated, 0, index);
+            Array.Copy(callbacks.UniformCallback, index + 1, updated, index, updated.Length - index);
+            callbacks.UniformCallback = updated;
             return true;
         }
     }
@@ -102,7 +106,7 @@ public abstract class PacketDispatcherBase<TInPacket>
             callbackWarp.TempCallback.TryGetValue(from, out tempCallback);
 
             callbackWarp.SpecificCallback.TryGetValue(from, out specificCallback);
-            uniformCallbacks = [.. callbackWarp.UniformCallback];
+            uniformCallbacks = callbackWarp.UniformCallback;
         }
 
         var context = new PacketContext(from);
@@ -137,9 +141,9 @@ public abstract class PacketDispatcherBase<TInPacket>
         }
     }
 
-    protected readonly struct CallbackWarp()
+    protected sealed class CallbackWarp
     {
-        public readonly List<IReceiveCallback> UniformCallback = [];
+        public IReceiveCallback[] UniformCallback = [];
         public readonly Dictionary<Guid, IReceiveCallback> SpecificCallback = [];
         public readonly Dictionary<Guid, IReceiveCallback> TempCallback = [];
     }

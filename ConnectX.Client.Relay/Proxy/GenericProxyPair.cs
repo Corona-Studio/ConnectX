@@ -1,4 +1,4 @@
-﻿using ConnectX.Client.Messages.Proxy;
+using ConnectX.Client.Messages.Proxy;
 using ConnectX.Client.Transmission.Connections;
 using ConnectX.Shared.Interfaces;
 using Hive.Both.General.Dispatchers;
@@ -26,7 +26,7 @@ public class GenericProxyPair : IDisposable
         _dispatcher = dispatcher;
 
         dispatcher.AddHandler<ForwardPacketCarrier>(ReceivedForwardPacket);
-        proxyBase.OutwardSenders.Add(OnSend);
+        proxyBase.AddOutwardAsyncSender(OnSend);
     }
 
     public ISender Sender { get; }
@@ -51,24 +51,24 @@ public class GenericProxyPair : IDisposable
     public void Dispose()
     {
         _dispatcher.RemoveHandler<ForwardPacketCarrier>(ReceivedForwardPacket);
+        ProxyBase?.RemoveOutwardAsyncSender(OnSend);
         ProxyBase?.Dispose();
     }
 
-    private bool OnSend(ForwardPacketCarrier data)
+    private ValueTask<bool> OnSend(ForwardPacketCarrier data)
     {
-        if (data.SelfRealPort != LocalRealPort) return false;
+        if (data.SelfRealPort != LocalRealPort) return ValueTask.FromResult(false);
         if (Sender is RelayConnection relayConnection)
-        {
-            relayConnection.SendByWorker(data.Payload);
-            return true;
-        }
+            return relayConnection.SendByWorkerAsync(data.Payload);
 
         Sender.SendData(data);
-        return true;
+        return ValueTask.FromResult(true);
     }
 
     private void ReceivedForwardPacket(MessageContext<ForwardPacketCarrier> ctx)
     {
-        ProxyBase?.OnReceiveMcPacketCarrier(ctx.Message);
+        // Dispatcher fan-out must not put the same disposable carrier into
+        // several queues. Each receiver owns a distinct reference.
+        ProxyBase?.OnReceiveMcPacketCarrier(ctx.Message.Retain());
     }
 }

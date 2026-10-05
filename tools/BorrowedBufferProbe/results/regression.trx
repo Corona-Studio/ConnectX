@@ -1,0 +1,145 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="6008706e-928b-4ac7-b570-bf7ef10a8ae9" name="@PAULLRLUO-MC1 2026-10-06 00:17:05" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-10-06T00:17:05.6329760+08:00" queuing="2026-10-06T00:17:05.6329760+08:00" start="2026-10-06T00:17:03.8340790+08:00" finish="2026-10-06T00:17:05.6581090+08:00" />
+  <TestSettings name="default" id="2cd7c6f7-5847-4ce9-933d-6a743743f5dd">
+    <Deployment runDeploymentRoot="_PAULLRLUO-MC1_2026-10-06_00_17_05" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="69567759-8358-45a1-a778-8b3ecbf23be3" testId="e6048119-5580-d3ff-6d3b-f8663c085f4f" testName="FragmentedSnappyCompatibilityAndMutations" computerName="PAULLRLUO-MC1" duration="00:00:00.0645370" startTime="2026-10-06T00:17:05.3121940+08:00" endTime="2026-10-06T00:17:05.3767300+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="69567759-8358-45a1-a778-8b3ecbf23be3">
+      <Output>
+        <StdOut>Raw Snappy compatibility: 260 fragmented corpus cases + all copy tags and malformed inputs passed.</StdOut>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="07903574-5478-4257-9495-baa3b5d07259" testId="242af28f-0a04-f3eb-1af2-08efc27722f7" testName="BorrowedReceiveLifetimeAndCancellation" computerName="PAULLRLUO-MC1" duration="00:00:00.0110000" startTime="2026-10-06T00:17:04.7154350+08:00" endTime="2026-10-06T00:17:04.7264120+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="07903574-5478-4257-9495-baa3b5d07259" />
+    <UnitTestResult executionId="a067d64e-a6d9-4593-8cc1-236a02499efb" testId="bcb84fdb-cc39-299b-a464-3da0e599b644" testName="RealTcpAllocationMeasurement" computerName="PAULLRLUO-MC1" duration="00:00:00.0678219" startTime="2026-10-06T00:17:05.3848520+08:00" endTime="2026-10-06T00:17:05.4526730+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="a067d64e-a6d9-4593-8cc1-236a02499efb">
+      <Output>
+        <StdOut>Real warmed loopback TCP: 1504 process-wide managed bytes / 10000 packets (includes runtime/thread scheduling).</StdOut>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="2d442eb2-5bf5-463a-b2ce-83bd5624587d" testId="fa966a88-6aee-33ef-1473-848a539ec24b" testName="DiscardedValueTasksAreConsumedWithoutAllocations" computerName="PAULLRLUO-MC1" duration="00:00:00.0123839" startTime="2026-10-06T00:17:05.2997810+08:00" endTime="2026-10-06T00:17:05.3121640+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="2d442eb2-5bf5-463a-b2ce-83bd5624587d">
+      <Output>
+        <StdOut>Pending ValueTask Forget observers: 0 managed bytes / 100000 completions.</StdOut>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="3074bdaa-959a-416d-82ba-9c8cfdee8779" testId="72c9468d-bd8c-20f1-0737-edbdc64a63f3" testName="WritableFramesUseOriginalArrayAndHandlePartialSends" computerName="PAULLRLUO-MC1" duration="00:00:00.0007870" startTime="2026-10-06T00:17:05.6352860+08:00" endTime="2026-10-06T00:17:05.6360740+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="3074bdaa-959a-416d-82ba-9c8cfdee8779" />
+    <UnitTestResult executionId="5627f6a7-e921-411c-94c4-799b14d63dd0" testId="e3f67602-45ff-bf25-3104-f83c26e0bc43" testName="SharedBuffersAndRealMemoryPackWireCompatibility" computerName="PAULLRLUO-MC1" duration="00:00:00.1316030" startTime="2026-10-06T00:17:05.4549720+08:00" endTime="2026-10-06T00:17:05.5865750+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="5627f6a7-e921-411c-94c4-799b14d63dd0">
+      <Output>
+        <StdOut>Segmented Snappy decode + two pooled carrier consumers: 0 managed bytes / 10000 packets.
+Real MemoryPack encode + Hive send/dispatch: 0 managed bytes / 100000 packets (synchronous fake transport).
+Prior flattened Snappy decode + carrier: 2080000 managed bytes / 10000 packets.</StdOut>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="c6e6ca64-2b02-45d0-9c5a-4997081f5de6" testId="cffc0344-f0a8-1b86-3876-dc7ae0fa6cb8" testName="WarmedBorrowedSendAndCallbackAllocations" computerName="PAULLRLUO-MC1" duration="00:00:00.0486230" startTime="2026-10-06T00:17:05.5866250+08:00" endTime="2026-10-06T00:17:05.6352480+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="c6e6ca64-2b02-45d0-9c5a-4997081f5de6">
+      <Output>
+        <StdOut>Hot path: 0 managed bytes / 100000 borrowed sends + callback dispatches (warmed synchronous fake transport).</StdOut>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="bf5435e9-f06c-4961-9aee-9ce2a3df5515" testId="27e1a621-98b9-30af-d60d-d22d5b5ccdd0" testName="SegmentedPartialSendingAndCancellation" computerName="PAULLRLUO-MC1" duration="00:00:00.0011540" startTime="2026-10-06T00:17:05.4538100+08:00" endTime="2026-10-06T00:17:05.4549650+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="bf5435e9-f06c-4961-9aee-9ce2a3df5515" />
+    <UnitTestResult executionId="74084e21-e43d-4db1-a252-159941292966" testId="51125b19-5a3f-043e-ce47-72102703aa01" testName="BoundedQueueRetriesPreserveOrderingAndDrain" computerName="PAULLRLUO-MC1" duration="00:00:00.5172160" startTime="2026-10-06T00:17:04.7268970+08:00" endTime="2026-10-06T00:17:05.2441130+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="74084e21-e43d-4db1-a252-159941292966" />
+    <UnitTestResult executionId="e0f9551f-75b5-4d6d-af3d-23c3f3438e74" testId="30f5fcc9-56e0-cd31-189b-eb236fb71c69" testName="ConcurrentTcpStreamAndBorrowedSends" computerName="PAULLRLUO-MC1" duration="00:00:00.0437800" startTime="2026-10-06T00:17:05.2559700+08:00" endTime="2026-10-06T00:17:05.2997500+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="e0f9551f-75b5-4d6d-af3d-23c3f3438e74" />
+    <UnitTestResult executionId="3b68aa9a-b9e0-4e27-93e6-fee336227411" testId="950c44bd-f94c-cb87-28ab-a87b12f48a5b" testName="RejectMalformedAndTruncatedFrames" computerName="PAULLRLUO-MC1" duration="00:00:00.0010850" startTime="2026-10-06T00:17:05.4527110+08:00" endTime="2026-10-06T00:17:05.4537960+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="3b68aa9a-b9e0-4e27-93e6-fee336227411" />
+    <UnitTestResult executionId="11e00954-9b2d-4f13-8afa-02a1bf3c82a5" testId="ce7e56a8-1de6-8276-73af-8148afee176a" testName="PacketMappingReadsRemainConsistentDuringRegistration" computerName="PAULLRLUO-MC1" duration="00:00:00.0064500" startTime="2026-10-06T00:17:05.3767650+08:00" endTime="2026-10-06T00:17:05.3832150+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="11e00954-9b2d-4f13-8afa-02a1bf3c82a5" />
+    <UnitTestResult executionId="3be050e6-a41c-4e4a-8554-6f5eb540e2ce" testId="54b82802-06a0-e778-9dc1-e4558bed59a0" testName="ConcurrentPoolOwnershipAndLimits" computerName="PAULLRLUO-MC1" duration="00:00:00.0117800" startTime="2026-10-06T00:17:05.2441600+08:00" endTime="2026-10-06T00:17:05.2559400+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="3be050e6-a41c-4e4a-8554-6f5eb540e2ce" />
+    <UnitTestResult executionId="14b98b97-79c5-440d-a770-8e3b3c158550" testId="a40e0c0d-bfb1-ed05-dd60-c0173eb82588" testName="QueueOwnsPayloadUntilAsyncSendCompletes" computerName="PAULLRLUO-MC1" duration="00:00:00.0015520" startTime="2026-10-06T00:17:05.3832670+08:00" endTime="2026-10-06T00:17:05.3848190+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="14b98b97-79c5-440d-a770-8e3b3c158550" />
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="ConcurrentPoolOwnershipAndLimits" storage="/users/paullrluo/.codex/worktrees/60a7/connectx/tools/borrowedbuffertests/bin/release/net10.0/borrowedbuffertests.dll" id="54b82802-06a0-e778-9dc1-e4558bed59a0">
+      <Execution id="3be050e6-a41c-4e4a-8554-6f5eb540e2ce" />
+      <TestMethod codeBase="/Users/paullrluo/.codex/worktrees/60a7/ConnectX/tools/BorrowedBufferTests/bin/Release/net10.0/BorrowedBufferTests.dll" adapterTypeName="executor://nunit3testexecutor/" className="RegressionTests" name="ConcurrentPoolOwnershipAndLimits" />
+    </UnitTest>
+    <UnitTest name="SharedBuffersAndRealMemoryPackWireCompatibility" storage="/users/paullrluo/.codex/worktrees/60a7/connectx/tools/borrowedbuffertests/bin/release/net10.0/borrowedbuffertests.dll" id="e3f67602-45ff-bf25-3104-f83c26e0bc43">
+      <Execution id="5627f6a7-e921-411c-94c4-799b14d63dd0" />
+      <TestMethod codeBase="/Users/paullrluo/.codex/worktrees/60a7/ConnectX/tools/BorrowedBufferTests/bin/Release/net10.0/BorrowedBufferTests.dll" adapterTypeName="executor://nunit3testexecutor/" className="RegressionTests" name="SharedBuffersAndRealMemoryPackWireCompatibility" />
+    </UnitTest>
+    <UnitTest name="WritableFramesUseOriginalArrayAndHandlePartialSends" storage="/users/paullrluo/.codex/worktrees/60a7/connectx/tools/borrowedbuffertests/bin/release/net10.0/borrowedbuffertests.dll" id="72c9468d-bd8c-20f1-0737-edbdc64a63f3">
+      <Execution id="3074bdaa-959a-416d-82ba-9c8cfdee8779" />
+      <TestMethod codeBase="/Users/paullrluo/.codex/worktrees/60a7/ConnectX/tools/BorrowedBufferTests/bin/Release/net10.0/BorrowedBufferTests.dll" adapterTypeName="executor://nunit3testexecutor/" className="RegressionTests" name="WritableFramesUseOriginalArrayAndHandlePartialSends" />
+    </UnitTest>
+    <UnitTest name="DiscardedValueTasksAreConsumedWithoutAllocations" storage="/users/paullrluo/.codex/worktrees/60a7/connectx/tools/borrowedbuffertests/bin/release/net10.0/borrowedbuffertests.dll" id="fa966a88-6aee-33ef-1473-848a539ec24b">
+      <Execution id="2d442eb2-5bf5-463a-b2ce-83bd5624587d" />
+      <TestMethod codeBase="/Users/paullrluo/.codex/worktrees/60a7/ConnectX/tools/BorrowedBufferTests/bin/Release/net10.0/BorrowedBufferTests.dll" adapterTypeName="executor://nunit3testexecutor/" className="RegressionTests" name="DiscardedValueTasksAreConsumedWithoutAllocations" />
+    </UnitTest>
+    <UnitTest name="WarmedBorrowedSendAndCallbackAllocations" storage="/users/paullrluo/.codex/worktrees/60a7/connectx/tools/borrowedbuffertests/bin/release/net10.0/borrowedbuffertests.dll" id="cffc0344-f0a8-1b86-3876-dc7ae0fa6cb8">
+      <Execution id="c6e6ca64-2b02-45d0-9c5a-4997081f5de6" />
+      <TestMethod codeBase="/Users/paullrluo/.codex/worktrees/60a7/ConnectX/tools/BorrowedBufferTests/bin/Release/net10.0/BorrowedBufferTests.dll" adapterTypeName="executor://nunit3testexecutor/" className="RegressionTests" name="WarmedBorrowedSendAndCallbackAllocations" />
+    </UnitTest>
+    <UnitTest name="BorrowedReceiveLifetimeAndCancellation" storage="/users/paullrluo/.codex/worktrees/60a7/connectx/tools/borrowedbuffertests/bin/release/net10.0/borrowedbuffertests.dll" id="242af28f-0a04-f3eb-1af2-08efc27722f7">
+      <Execution id="07903574-5478-4257-9495-baa3b5d07259" />
+      <TestMethod codeBase="/Users/paullrluo/.codex/worktrees/60a7/ConnectX/tools/BorrowedBufferTests/bin/Release/net10.0/BorrowedBufferTests.dll" adapterTypeName="executor://nunit3testexecutor/" className="RegressionTests" name="BorrowedReceiveLifetimeAndCancellation" />
+    </UnitTest>
+    <UnitTest name="PacketMappingReadsRemainConsistentDuringRegistration" storage="/users/paullrluo/.codex/worktrees/60a7/connectx/tools/borrowedbuffertests/bin/release/net10.0/borrowedbuffertests.dll" id="ce7e56a8-1de6-8276-73af-8148afee176a">
+      <Execution id="11e00954-9b2d-4f13-8afa-02a1bf3c82a5" />
+      <TestMethod codeBase="/Users/paullrluo/.codex/worktrees/60a7/ConnectX/tools/BorrowedBufferTests/bin/Release/net10.0/BorrowedBufferTests.dll" adapterTypeName="executor://nunit3testexecutor/" className="RegressionTests" name="PacketMappingReadsRemainConsistentDuringRegistration" />
+    </UnitTest>
+    <UnitTest name="RejectMalformedAndTruncatedFrames" storage="/users/paullrluo/.codex/worktrees/60a7/connectx/tools/borrowedbuffertests/bin/release/net10.0/borrowedbuffertests.dll" id="950c44bd-f94c-cb87-28ab-a87b12f48a5b">
+      <Execution id="3b68aa9a-b9e0-4e27-93e6-fee336227411" />
+      <TestMethod codeBase="/Users/paullrluo/.codex/worktrees/60a7/ConnectX/tools/BorrowedBufferTests/bin/Release/net10.0/BorrowedBufferTests.dll" adapterTypeName="executor://nunit3testexecutor/" className="RegressionTests" name="RejectMalformedAndTruncatedFrames" />
+    </UnitTest>
+    <UnitTest name="SegmentedPartialSendingAndCancellation" storage="/users/paullrluo/.codex/worktrees/60a7/connectx/tools/borrowedbuffertests/bin/release/net10.0/borrowedbuffertests.dll" id="27e1a621-98b9-30af-d60d-d22d5b5ccdd0">
+      <Execution id="bf5435e9-f06c-4961-9aee-9ce2a3df5515" />
+      <TestMethod codeBase="/Users/paullrluo/.codex/worktrees/60a7/ConnectX/tools/BorrowedBufferTests/bin/Release/net10.0/BorrowedBufferTests.dll" adapterTypeName="executor://nunit3testexecutor/" className="RegressionTests" name="SegmentedPartialSendingAndCancellation" />
+    </UnitTest>
+    <UnitTest name="ConcurrentTcpStreamAndBorrowedSends" storage="/users/paullrluo/.codex/worktrees/60a7/connectx/tools/borrowedbuffertests/bin/release/net10.0/borrowedbuffertests.dll" id="30f5fcc9-56e0-cd31-189b-eb236fb71c69">
+      <Execution id="e0f9551f-75b5-4d6d-af3d-23c3f3438e74" />
+      <TestMethod codeBase="/Users/paullrluo/.codex/worktrees/60a7/ConnectX/tools/BorrowedBufferTests/bin/Release/net10.0/BorrowedBufferTests.dll" adapterTypeName="executor://nunit3testexecutor/" className="RegressionTests" name="ConcurrentTcpStreamAndBorrowedSends" />
+    </UnitTest>
+    <UnitTest name="RealTcpAllocationMeasurement" storage="/users/paullrluo/.codex/worktrees/60a7/connectx/tools/borrowedbuffertests/bin/release/net10.0/borrowedbuffertests.dll" id="bcb84fdb-cc39-299b-a464-3da0e599b644">
+      <Execution id="a067d64e-a6d9-4593-8cc1-236a02499efb" />
+      <TestMethod codeBase="/Users/paullrluo/.codex/worktrees/60a7/ConnectX/tools/BorrowedBufferTests/bin/Release/net10.0/BorrowedBufferTests.dll" adapterTypeName="executor://nunit3testexecutor/" className="RegressionTests" name="RealTcpAllocationMeasurement" />
+    </UnitTest>
+    <UnitTest name="QueueOwnsPayloadUntilAsyncSendCompletes" storage="/users/paullrluo/.codex/worktrees/60a7/connectx/tools/borrowedbuffertests/bin/release/net10.0/borrowedbuffertests.dll" id="a40e0c0d-bfb1-ed05-dd60-c0173eb82588">
+      <Execution id="14b98b97-79c5-440d-a770-8e3b3c158550" />
+      <TestMethod codeBase="/Users/paullrluo/.codex/worktrees/60a7/ConnectX/tools/BorrowedBufferTests/bin/Release/net10.0/BorrowedBufferTests.dll" adapterTypeName="executor://nunit3testexecutor/" className="RegressionTests" name="QueueOwnsPayloadUntilAsyncSendCompletes" />
+    </UnitTest>
+    <UnitTest name="FragmentedSnappyCompatibilityAndMutations" storage="/users/paullrluo/.codex/worktrees/60a7/connectx/tools/borrowedbuffertests/bin/release/net10.0/borrowedbuffertests.dll" id="e6048119-5580-d3ff-6d3b-f8663c085f4f">
+      <Execution id="69567759-8358-45a1-a778-8b3ecbf23be3" />
+      <TestMethod codeBase="/Users/paullrluo/.codex/worktrees/60a7/ConnectX/tools/BorrowedBufferTests/bin/Release/net10.0/BorrowedBufferTests.dll" adapterTypeName="executor://nunit3testexecutor/" className="RegressionTests" name="FragmentedSnappyCompatibilityAndMutations" />
+    </UnitTest>
+    <UnitTest name="BoundedQueueRetriesPreserveOrderingAndDrain" storage="/users/paullrluo/.codex/worktrees/60a7/connectx/tools/borrowedbuffertests/bin/release/net10.0/borrowedbuffertests.dll" id="51125b19-5a3f-043e-ce47-72102703aa01">
+      <Execution id="74084e21-e43d-4db1-a252-159941292966" />
+      <TestMethod codeBase="/Users/paullrluo/.codex/worktrees/60a7/ConnectX/tools/BorrowedBufferTests/bin/Release/net10.0/BorrowedBufferTests.dll" adapterTypeName="executor://nunit3testexecutor/" className="RegressionTests" name="BoundedQueueRetriesPreserveOrderingAndDrain" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="e6048119-5580-d3ff-6d3b-f8663c085f4f" executionId="69567759-8358-45a1-a778-8b3ecbf23be3" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="242af28f-0a04-f3eb-1af2-08efc27722f7" executionId="07903574-5478-4257-9495-baa3b5d07259" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="bcb84fdb-cc39-299b-a464-3da0e599b644" executionId="a067d64e-a6d9-4593-8cc1-236a02499efb" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="fa966a88-6aee-33ef-1473-848a539ec24b" executionId="2d442eb2-5bf5-463a-b2ce-83bd5624587d" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="72c9468d-bd8c-20f1-0737-edbdc64a63f3" executionId="3074bdaa-959a-416d-82ba-9c8cfdee8779" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="e3f67602-45ff-bf25-3104-f83c26e0bc43" executionId="5627f6a7-e921-411c-94c4-799b14d63dd0" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="cffc0344-f0a8-1b86-3876-dc7ae0fa6cb8" executionId="c6e6ca64-2b02-45d0-9c5a-4997081f5de6" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="27e1a621-98b9-30af-d60d-d22d5b5ccdd0" executionId="bf5435e9-f06c-4961-9aee-9ce2a3df5515" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="51125b19-5a3f-043e-ce47-72102703aa01" executionId="74084e21-e43d-4db1-a252-159941292966" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="30f5fcc9-56e0-cd31-189b-eb236fb71c69" executionId="e0f9551f-75b5-4d6d-af3d-23c3f3438e74" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="950c44bd-f94c-cb87-28ab-a87b12f48a5b" executionId="3b68aa9a-b9e0-4e27-93e6-fee336227411" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="ce7e56a8-1de6-8276-73af-8148afee176a" executionId="11e00954-9b2d-4f13-8afa-02a1bf3c82a5" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="54b82802-06a0-e778-9dc1-e4558bed59a0" executionId="3be050e6-a41c-4e4a-8554-6f5eb540e2ce" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="a40e0c0d-bfb1-ed05-dd60-c0173eb82588" executionId="14b98b97-79c5-440d-a770-8e3b3c158550" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="列表中未列出的结果" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="所有已加载的结果" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Completed">
+    <Counters total="14" executed="14" passed="14" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>NUnit Adapter 6.1.0.0: Test execution started
+Running all tests in /Users/paullrluo/.codex/worktrees/60a7/ConnectX/tools/BorrowedBufferTests/bin/Release/net10.0/BorrowedBufferTests.dll
+   NUnit3TestExecutor discovered 14 of 14 NUnit test cases using Current Discovery mode, Non-Explicit run
+Pending ValueTask Forget observers: 0 managed bytes / 100000 completions.
+
+Raw Snappy compatibility: 260 fragmented corpus cases + all copy tags and malformed inputs passed.
+
+Real warmed loopback TCP: 1504 process-wide managed bytes / 10000 packets (includes runtime/thread scheduling).
+
+Segmented Snappy decode + two pooled carrier consumers: 0 managed bytes / 10000 packets.
+Real MemoryPack encode + Hive send/dispatch: 0 managed bytes / 100000 packets (synchronous fake transport).
+Prior flattened Snappy decode + carrier: 2080000 managed bytes / 10000 packets.
+
+Hot path: 0 managed bytes / 100000 borrowed sends + callback dispatches (warmed synchronous fake transport).
+
+NUnit Adapter 6.1.0.0: Test execution complete
+</StdOut>
+    </Output>
+  </ResultSummary>
+</TestRun>

@@ -26,6 +26,14 @@ internal sealed class SessionOutbox
         SessionHealth.Close(_session);
     }
 
+    public async Task<bool> FlushPendingAsync()
+    {
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Enqueue(_ => { ready.TrySetResult(); return ValueTask.FromResult(true); });
+        await Task.WhenAny(ready.Task, Completion).ConfigureAwait(false);
+        return ready.Task.IsCompletedSuccessfully;
+    }
+
     public void Complete() => _queue.Writer.TryComplete();
 
     private async Task RunAsync(CancellationToken lifetime, ILogger logger)

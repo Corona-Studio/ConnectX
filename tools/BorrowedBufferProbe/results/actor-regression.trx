@@ -1,0 +1,105 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="a95819a1-ed5d-433a-9f6b-a3457325e8a7" name="@PAULLRLUO-MC1 2026-10-06 00:50:56" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-10-06T00:50:56.2392380+08:00" queuing="2026-10-06T00:50:56.2392380+08:00" start="2026-10-06T00:50:54.7683600+08:00" finish="2026-10-06T00:50:56.3990340+08:00" />
+  <TestSettings name="default" id="f50f3023-2049-4398-a398-0d2f52a17eb7">
+    <Deployment runDeploymentRoot="_PAULLRLUO-MC1_2026-10-06_00_50_56" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="0ac057ad-08a1-447f-a877-4622135b82db" testId="2683b282-1472-923d-21b1-6d83837221e6" testName="DisconnectedOwnerCannotCommitLateNetworkCreationAndOrphanIsDeleted" computerName="PAULLRLUO-MC1" duration="00:00:00.0411540" startTime="2026-10-06T00:50:56.1151240+08:00" endTime="2026-10-06T00:50:56.1562770+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="0ac057ad-08a1-447f-a877-4622135b82db" />
+    <UnitTestResult executionId="494d4721-1c58-4021-ab2b-ecd41d49a74b" testId="0e24b691-5730-9800-80ae-8da8bf593b09" testName="OneShotReplyIgnoresOtherConnectionsAndDuplicateReplies" computerName="PAULLRLUO-MC1" duration="00:00:00.0016310" startTime="2026-10-06T00:50:55.4761400+08:00" endTime="2026-10-06T00:50:55.4777700+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="494d4721-1c58-4021-ab2b-ecd41d49a74b" />
+    <UnitTestResult executionId="7c98c42d-4e2d-4155-86a4-201272d04736" testId="90dd9bde-878f-2745-7243-460817bed1fc" testName="FullMailboxRejectsWithoutCreatingWaitingTasks" computerName="PAULLRLUO-MC1" duration="00:00:00.0026549" startTime="2026-10-06T00:50:55.4589260+08:00" endTime="2026-10-06T00:50:55.4615820+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="7c98c42d-4e2d-4155-86a4-201272d04736" />
+    <UnitTestResult executionId="99744fe9-4cfa-42aa-975d-1589caf9ad6c" testId="6c88c3f5-3e6f-302c-aa8f-6446b98155ac" testName="RealTcpLoginRoomsDatagramsWorkerStreamsAndShutdown" computerName="PAULLRLUO-MC1" duration="00:00:00.2033500" startTime="2026-10-06T00:50:56.1563640+08:00" endTime="2026-10-06T00:50:56.3597130+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="99744fe9-4cfa-42aa-975d-1589caf9ad6c" />
+    <UnitTestResult executionId="2bf19247-029c-4fab-ba71-956e0e0ea1eb" testId="481a0fd3-ddd6-241f-2220-555462858910" testName="AuthorizedMappingReplacementsAndRoomDismissalKeepRoutesConsistent" computerName="PAULLRLUO-MC1" duration="00:00:00.0143860" startTime="2026-10-06T00:50:56.3598060+08:00" endTime="2026-10-06T00:50:56.3741910+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="2bf19247-029c-4fab-ba71-956e0e0ea1eb" />
+    <UnitTestResult executionId="b626370b-9a24-4e25-b1cf-037e2480a848" testId="7037f256-09f0-3db9-7c7b-b67108eca2ab" testName="InvalidHandlerProducesActionableDiagnostic" computerName="PAULLRLUO-MC1" duration="00:00:00.0662959" startTime="2026-10-06T00:50:56.0486930+08:00" endTime="2026-10-06T00:50:56.1149880+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="b626370b-9a24-4e25-b1cf-037e2480a848" />
+    <UnitTestResult executionId="232ae763-94a6-4689-a7af-6947bc541181" testId="5b976dd4-2a2d-0a5f-8ead-c2e5b7256e25" testName="AwaitKeepsThreadAndContextAndDoesNotInterleaveTurns" computerName="PAULLRLUO-MC1" duration="00:00:00.0410830" startTime="2026-10-06T00:50:55.4173210+08:00" endTime="2026-10-06T00:50:55.4583790+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="232ae763-94a6-4689-a7af-6947bc541181" />
+    <UnitTestResult executionId="883b2801-7de1-4fab-8651-7c62992da0be" testId="183caac8-1beb-0e09-9fae-e16ec4c7edf0" testName="GeneratedTaskAndStructHandlersCompileAndAreDeterministic" computerName="PAULLRLUO-MC1" duration="00:00:00.5456890" startTime="2026-10-06T00:50:55.5029720+08:00" endTime="2026-10-06T00:50:56.0486620+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="883b2801-7de1-4fab-8651-7c62992da0be" />
+    <UnitTestResult executionId="b73390ce-1b1f-4f19-a878-2b979f547d91" testId="49a1d8a1-9a82-b7db-3f20-7d9dabfb06bf" testName="OutboxPreservesOrderAndSlowConnectionDoesNotBlockActor" computerName="PAULLRLUO-MC1" duration="00:00:00.0123200" startTime="2026-10-06T00:50:55.4777920+08:00" endTime="2026-10-06T00:50:55.4901120+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="b73390ce-1b1f-4f19-a878-2b979f547d91" />
+    <UnitTestResult executionId="2eed42ab-a137-4fd9-8806-b82799cc4415" testId="8a2c1878-7ec5-0dab-6a38-a61f377f8f4d" testName="AdmissionIsOneShotAndCannotBeClaimedByReplacedConnection" computerName="PAULLRLUO-MC1" duration="00:00:00.0044390" startTime="2026-10-06T00:50:55.4716750+08:00" endTime="2026-10-06T00:50:55.4761140+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="2eed42ab-a137-4fd9-8806-b82799cc4415" />
+    <UnitTestResult executionId="8787eef7-cad1-4650-9836-0f66acbe8872" testId="2cd72827-8594-1e44-15de-11883bdaf928" testName="GeneratedBindingsRunInContextAndDisposeOnlyTheirOwnHandlers" computerName="PAULLRLUO-MC1" duration="00:00:00.0057560" startTime="2026-10-06T00:50:55.4615940+08:00" endTime="2026-10-06T00:50:55.4673500+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="8787eef7-cad1-4650-9836-0f66acbe8872" />
+    <UnitTestResult executionId="f5cb8296-8a3b-4cda-87c5-f2844ecaf811" testId="7c7203bf-d63d-ee64-1a35-5858f5a92f2c" testName="SeparateActorsHaveSeparateContextsAndRejectForeignAccess" computerName="PAULLRLUO-MC1" duration="00:00:00.0033810" startTime="2026-10-06T00:50:55.4673700+08:00" endTime="2026-10-06T00:50:55.4707510+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="f5cb8296-8a3b-4cda-87c5-f2844ecaf811" />
+    <UnitTestResult executionId="5aa32112-d778-4d5f-8def-f15302228f24" testId="df5c8325-f631-4c7f-ae72-e4c97d71292b" testName="RequestsOnSameConnectionAreSerializedWithoutCorrelationIds" computerName="PAULLRLUO-MC1" duration="00:00:00.0127360" startTime="2026-10-06T00:50:55.4901430+08:00" endTime="2026-10-06T00:50:55.5028790+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="5aa32112-d778-4d5f-8def-f15302228f24" />
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="InvalidHandlerProducesActionableDiagnostic" storage="/users/paullrluo/github/launcherx/connectx/connectx.tests/bin/release/net10.0/connectx.tests.dll" id="7037f256-09f0-3db9-7c7b-b67108eca2ab">
+      <Execution id="b626370b-9a24-4e25-b1cf-037e2480a848" />
+      <TestMethod codeBase="/Users/paullrluo/GitHub/LauncherX/ConnectX/ConnectX.Tests/bin/Release/net10.0/ConnectX.Tests.dll" adapterTypeName="executor://nunit3testexecutor/" className="ConnectX.Tests.GeneratorTests" name="InvalidHandlerProducesActionableDiagnostic" />
+    </UnitTest>
+    <UnitTest name="RequestsOnSameConnectionAreSerializedWithoutCorrelationIds" storage="/users/paullrluo/github/launcherx/connectx/connectx.tests/bin/release/net10.0/connectx.tests.dll" id="df5c8325-f631-4c7f-ae72-e4c97d71292b">
+      <Execution id="5aa32112-d778-4d5f-8def-f15302228f24" />
+      <TestMethod codeBase="/Users/paullrluo/GitHub/LauncherX/ConnectX/ConnectX.Tests/bin/Release/net10.0/ConnectX.Tests.dll" adapterTypeName="executor://nunit3testexecutor/" className="ConnectX.Tests.DispatcherTests" name="RequestsOnSameConnectionAreSerializedWithoutCorrelationIds" />
+    </UnitTest>
+    <UnitTest name="OutboxPreservesOrderAndSlowConnectionDoesNotBlockActor" storage="/users/paullrluo/github/launcherx/connectx/connectx.tests/bin/release/net10.0/connectx.tests.dll" id="49a1d8a1-9a82-b7db-3f20-7d9dabfb06bf">
+      <Execution id="b73390ce-1b1f-4f19-a878-2b979f547d91" />
+      <TestMethod codeBase="/Users/paullrluo/GitHub/LauncherX/ConnectX/ConnectX.Tests/bin/Release/net10.0/ConnectX.Tests.dll" adapterTypeName="executor://nunit3testexecutor/" className="ConnectX.Tests.DispatcherTests" name="OutboxPreservesOrderAndSlowConnectionDoesNotBlockActor" />
+    </UnitTest>
+    <UnitTest name="AdmissionIsOneShotAndCannotBeClaimedByReplacedConnection" storage="/users/paullrluo/github/launcherx/connectx/connectx.tests/bin/release/net10.0/connectx.tests.dll" id="8a2c1878-7ec5-0dab-6a38-a61f377f8f4d">
+      <Execution id="2eed42ab-a137-4fd9-8806-b82799cc4415" />
+      <TestMethod codeBase="/Users/paullrluo/GitHub/LauncherX/ConnectX/ConnectX.Tests/bin/Release/net10.0/ConnectX.Tests.dll" adapterTypeName="executor://nunit3testexecutor/" className="ConnectX.Tests.DispatcherTests" name="AdmissionIsOneShotAndCannotBeClaimedByReplacedConnection" />
+    </UnitTest>
+    <UnitTest name="GeneratedTaskAndStructHandlersCompileAndAreDeterministic" storage="/users/paullrluo/github/launcherx/connectx/connectx.tests/bin/release/net10.0/connectx.tests.dll" id="183caac8-1beb-0e09-9fae-e16ec4c7edf0">
+      <Execution id="883b2801-7de1-4fab-8651-7c62992da0be" />
+      <TestMethod codeBase="/Users/paullrluo/GitHub/LauncherX/ConnectX/ConnectX.Tests/bin/Release/net10.0/ConnectX.Tests.dll" adapterTypeName="executor://nunit3testexecutor/" className="ConnectX.Tests.GeneratorTests" name="GeneratedTaskAndStructHandlersCompileAndAreDeterministic" />
+    </UnitTest>
+    <UnitTest name="DisconnectedOwnerCannotCommitLateNetworkCreationAndOrphanIsDeleted" storage="/users/paullrluo/github/launcherx/connectx/connectx.tests/bin/release/net10.0/connectx.tests.dll" id="2683b282-1472-923d-21b1-6d83837221e6">
+      <Execution id="0ac057ad-08a1-447f-a877-4622135b82db" />
+      <TestMethod codeBase="/Users/paullrluo/GitHub/LauncherX/ConnectX/ConnectX.Tests/bin/Release/net10.0/ConnectX.Tests.dll" adapterTypeName="executor://nunit3testexecutor/" className="ConnectX.Tests.GroupStateTests" name="DisconnectedOwnerCannotCommitLateNetworkCreationAndOrphanIsDeleted" />
+    </UnitTest>
+    <UnitTest name="RealTcpLoginRoomsDatagramsWorkerStreamsAndShutdown" storage="/users/paullrluo/github/launcherx/connectx/connectx.tests/bin/release/net10.0/connectx.tests.dll" id="6c88c3f5-3e6f-302c-aa8f-6446b98155ac">
+      <Execution id="99744fe9-4cfa-42aa-975d-1589caf9ad6c" />
+      <TestMethod codeBase="/Users/paullrluo/GitHub/LauncherX/ConnectX/ConnectX.Tests/bin/Release/net10.0/ConnectX.Tests.dll" adapterTypeName="executor://nunit3testexecutor/" className="ConnectX.Tests.NetworkIntegrationTests" name="RealTcpLoginRoomsDatagramsWorkerStreamsAndShutdown" />
+    </UnitTest>
+    <UnitTest name="SeparateActorsHaveSeparateContextsAndRejectForeignAccess" storage="/users/paullrluo/github/launcherx/connectx/connectx.tests/bin/release/net10.0/connectx.tests.dll" id="7c7203bf-d63d-ee64-1a35-5858f5a92f2c">
+      <Execution id="f5cb8296-8a3b-4cda-87c5-f2844ecaf811" />
+      <TestMethod codeBase="/Users/paullrluo/GitHub/LauncherX/ConnectX/ConnectX.Tests/bin/Release/net10.0/ConnectX.Tests.dll" adapterTypeName="executor://nunit3testexecutor/" className="ConnectX.Tests.ActorTests" name="SeparateActorsHaveSeparateContextsAndRejectForeignAccess" />
+    </UnitTest>
+    <UnitTest name="AuthorizedMappingReplacementsAndRoomDismissalKeepRoutesConsistent" storage="/users/paullrluo/github/launcherx/connectx/connectx.tests/bin/release/net10.0/connectx.tests.dll" id="481a0fd3-ddd6-241f-2220-555462858910">
+      <Execution id="2bf19247-029c-4fab-ba71-956e0e0ea1eb" />
+      <TestMethod codeBase="/Users/paullrluo/GitHub/LauncherX/ConnectX/ConnectX.Tests/bin/Release/net10.0/ConnectX.Tests.dll" adapterTypeName="executor://nunit3testexecutor/" className="ConnectX.Tests.RelayTests" name="AuthorizedMappingReplacementsAndRoomDismissalKeepRoutesConsistent" />
+    </UnitTest>
+    <UnitTest name="OneShotReplyIgnoresOtherConnectionsAndDuplicateReplies" storage="/users/paullrluo/github/launcherx/connectx/connectx.tests/bin/release/net10.0/connectx.tests.dll" id="0e24b691-5730-9800-80ae-8da8bf593b09">
+      <Execution id="494d4721-1c58-4021-ab2b-ecd41d49a74b" />
+      <TestMethod codeBase="/Users/paullrluo/GitHub/LauncherX/ConnectX/ConnectX.Tests/bin/Release/net10.0/ConnectX.Tests.dll" adapterTypeName="executor://nunit3testexecutor/" className="ConnectX.Tests.DispatcherTests" name="OneShotReplyIgnoresOtherConnectionsAndDuplicateReplies" />
+    </UnitTest>
+    <UnitTest name="GeneratedBindingsRunInContextAndDisposeOnlyTheirOwnHandlers" storage="/users/paullrluo/github/launcherx/connectx/connectx.tests/bin/release/net10.0/connectx.tests.dll" id="2cd72827-8594-1e44-15de-11883bdaf928">
+      <Execution id="8787eef7-cad1-4650-9836-0f66acbe8872" />
+      <TestMethod codeBase="/Users/paullrluo/GitHub/LauncherX/ConnectX/ConnectX.Tests/bin/Release/net10.0/ConnectX.Tests.dll" adapterTypeName="executor://nunit3testexecutor/" className="ConnectX.Tests.ActorTests" name="GeneratedBindingsRunInContextAndDisposeOnlyTheirOwnHandlers" />
+    </UnitTest>
+    <UnitTest name="FullMailboxRejectsWithoutCreatingWaitingTasks" storage="/users/paullrluo/github/launcherx/connectx/connectx.tests/bin/release/net10.0/connectx.tests.dll" id="90dd9bde-878f-2745-7243-460817bed1fc">
+      <Execution id="7c98c42d-4e2d-4155-86a4-201272d04736" />
+      <TestMethod codeBase="/Users/paullrluo/GitHub/LauncherX/ConnectX/ConnectX.Tests/bin/Release/net10.0/ConnectX.Tests.dll" adapterTypeName="executor://nunit3testexecutor/" className="ConnectX.Tests.ActorTests" name="FullMailboxRejectsWithoutCreatingWaitingTasks" />
+    </UnitTest>
+    <UnitTest name="AwaitKeepsThreadAndContextAndDoesNotInterleaveTurns" storage="/users/paullrluo/github/launcherx/connectx/connectx.tests/bin/release/net10.0/connectx.tests.dll" id="5b976dd4-2a2d-0a5f-8ead-c2e5b7256e25">
+      <Execution id="232ae763-94a6-4689-a7af-6947bc541181" />
+      <TestMethod codeBase="/Users/paullrluo/GitHub/LauncherX/ConnectX/ConnectX.Tests/bin/Release/net10.0/ConnectX.Tests.dll" adapterTypeName="executor://nunit3testexecutor/" className="ConnectX.Tests.ActorTests" name="AwaitKeepsThreadAndContextAndDoesNotInterleaveTurns" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="2683b282-1472-923d-21b1-6d83837221e6" executionId="0ac057ad-08a1-447f-a877-4622135b82db" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="0e24b691-5730-9800-80ae-8da8bf593b09" executionId="494d4721-1c58-4021-ab2b-ecd41d49a74b" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="90dd9bde-878f-2745-7243-460817bed1fc" executionId="7c98c42d-4e2d-4155-86a4-201272d04736" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="6c88c3f5-3e6f-302c-aa8f-6446b98155ac" executionId="99744fe9-4cfa-42aa-975d-1589caf9ad6c" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="481a0fd3-ddd6-241f-2220-555462858910" executionId="2bf19247-029c-4fab-ba71-956e0e0ea1eb" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="7037f256-09f0-3db9-7c7b-b67108eca2ab" executionId="b626370b-9a24-4e25-b1cf-037e2480a848" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="5b976dd4-2a2d-0a5f-8ead-c2e5b7256e25" executionId="232ae763-94a6-4689-a7af-6947bc541181" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="183caac8-1beb-0e09-9fae-e16ec4c7edf0" executionId="883b2801-7de1-4fab-8651-7c62992da0be" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="49a1d8a1-9a82-b7db-3f20-7d9dabfb06bf" executionId="b73390ce-1b1f-4f19-a878-2b979f547d91" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="8a2c1878-7ec5-0dab-6a38-a61f377f8f4d" executionId="2eed42ab-a137-4fd9-8806-b82799cc4415" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="2cd72827-8594-1e44-15de-11883bdaf928" executionId="8787eef7-cad1-4650-9836-0f66acbe8872" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="7c7203bf-d63d-ee64-1a35-5858f5a92f2c" executionId="f5cb8296-8a3b-4cda-87c5-f2844ecaf811" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="df5c8325-f631-4c7f-ae72-e4c97d71292b" executionId="5aa32112-d778-4d5f-8def-f15302228f24" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="列表中未列出的结果" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="所有已加载的结果" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Completed">
+    <Counters total="13" executed="13" passed="13" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>NUnit Adapter 6.1.0.0: Test execution started
+Running all tests in /Users/paullrluo/GitHub/LauncherX/ConnectX/ConnectX.Tests/bin/Release/net10.0/ConnectX.Tests.dll
+   NUnit3TestExecutor discovered 13 of 13 NUnit test cases using Current Discovery mode, Non-Explicit run
+NUnit Adapter 6.1.0.0: Test execution complete
+</StdOut>
+    </Output>
+  </ResultSummary>
+</TestRun>

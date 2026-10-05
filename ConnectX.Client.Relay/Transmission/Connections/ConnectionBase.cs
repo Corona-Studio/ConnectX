@@ -1,8 +1,9 @@
-﻿using ConnectX.Client.Interfaces;
+using ConnectX.Client.Interfaces;
 using ConnectX.Shared.Interfaces;
 using Hive.Both.General.Dispatchers;
 using Hive.Codec.Abstractions;
 using Hive.Network.Shared;
+using Hive.Common.Shared.Pooling;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -53,14 +54,10 @@ public abstract class ConnectionBase : ISender, ICanPing<Guid>
 
     public void SendData<T>(T data)
     {
-        using var stream = RecycleMemoryStreamManagerHolder.Shared.GetStream();
+        using var stream = PooledBufferStream.Rent(NetworkSettings.MaxMessageSize);
         Codec.Encode(data, stream);
 
-        stream.Seek(0, SeekOrigin.Begin);
-
-        var buffer = stream.GetBuffer();
-
-        Send(buffer.AsMemory(0, (int)stream.Length));
+        Send(stream.Memory);
     }
 
     public virtual void Disconnect()

@@ -1,8 +1,10 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using System.Net;
 using System.Net.Sockets;
 using ConnectX.Client.Interfaces;
+using ConnectX.Client.Helpers;
 using ConnectX.Client.Messages.Proxy;
 using ConnectX.Shared.Helpers;
 using ConnectX.Shared.Messages;
@@ -10,6 +12,7 @@ using ConnectX.Shared.Messages.Relay;
 using ConnectX.Shared.Messages.Relay.Datagram;
 using Hive.Both.General.Dispatchers;
 using Hive.Codec.Abstractions;
+using Hive.Common.Shared.Pooling;
 using Hive.Network.Abstractions;
 using Hive.Network.Abstractions.Session;
 using Hive.Network.Shared;
@@ -281,19 +284,12 @@ public sealed class RelayConnection : ConnectionBase, IDatagramTransmit<RelayDat
 
         try
         {
-            var dataLength = (int)buffer.Length;
-
-            using var memoryOwner = MemoryPool<byte>.Shared.Rent(dataLength);
-            buffer.CopyTo(memoryOwner.Memory.Span);
-
-            var decompressedOwner = Snappy.DecompressToMemory(memoryOwner.Memory.Span[..dataLength]);
-            var carrier = new ForwardPacketCarrier
-            {
-                PayloadOwner = decompressedOwner,
-                Payload = decompressedOwner.Memory,
-                LastTryTime = 0,
-                TryCount = 0
-            };
+            using var decoded = PooledBufferStream.Rent(NetworkSettings.MaxMessageSize);
+            // Decode into the final pooled output directly, even across segments.
+            SnappyBlockDecoder.Decode(buffer, decoded);
+            using var carrier = ForwardPacketCarrier.Rent();
+            carrier.PayloadOwner = decoded.Retain();
+            carrier.Payload = decoded.Memory;
 
             Dispatcher.Dispatch(session, carrier);
         }
@@ -419,23 +415,36 @@ public sealed class RelayConnection : ConnectionBase, IDatagramTransmit<RelayDat
         Logger.LogRelayDisconnected(_relayEndPoint);
     }
 
+    // Compatibility entry point. The forwarding queue awaits SendByWorkerAsync
+    // instead, so its payload owner stays alive until the transport is done.
     public void SendByWorker(ReadOnlyMemory<byte> data)
     {
-        var dataLength = data.Length;
+        SendByWorkerAsync(data).Forget();
+    }
 
-        using var memoryOwner = MemoryPool<byte>.Shared.Rent(dataLength);
-        data.CopyTo(memoryOwner.Memory);
+    [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
+    public async ValueTask<bool> SendByWorkerAsync(ReadOnlyMemory<byte> data)
+    {
+        if (_relayServerWorkerLink is not IBorrowedBufferSession session)
+            return false;
 
-        var ms = RecycleMemoryStreamManagerHolder.Shared.GetStream();
-        var seq = new ReadOnlySequence<byte>(memoryOwner.Memory[..dataLength]);
+        var headerLength = session is IWritableFrameSession ? NetworkSettings.PacketBodyOffset : 0;
+        var compressed = ArrayPool<byte>.Shared.Rent(checked(Snappy.GetMaxCompressedLength(data.Length) + headerLength));
+        try
+        {
+            var length = Snappy.Compress(data.Span, compressed.AsSpan(headerLength));
+            if (data.Length <= length)
+                Logger.LogUnderperformedCompression(data.Length, length);
 
-        if (data.Length <= ms.Length)
-            Logger.LogUnderperformedCompression(data.Length, (int)ms.Length);
-
-        Snappy.Compress(seq, ms);
-        ms.Seek(0, SeekOrigin.Begin);
-
-        _relayServerWorkerLink?.TrySendAsync(ms, _linkCt).Forget();
+            if (session is IWritableFrameSession framed)
+                return await framed.TrySendFrameAsync(compressed.AsMemory(0, headerLength + length), _linkCt).ConfigureAwait(false);
+            return await session.TrySendAsync(
+                new ReadOnlySequence<byte>(compressed.AsMemory(0, length)), _linkCt).ConfigureAwait(false);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(compressed);
+        }
     }
 }
 

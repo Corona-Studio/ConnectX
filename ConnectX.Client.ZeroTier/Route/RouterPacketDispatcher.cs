@@ -1,9 +1,10 @@
-﻿using System.Buffers;
+using System.Buffers;
 using ConnectX.Client.Models;
 using ConnectX.Client.Route.Packet;
 using ConnectX.Shared.Helpers;
 using Hive.Codec.Abstractions;
 using Hive.Network.Shared;
+using Hive.Common.Shared.Pooling;
 using Microsoft.Extensions.Logging;
 
 namespace ConnectX.Client.Route;
@@ -42,14 +43,10 @@ public sealed class RouterPacketDispatcher : PacketDispatcherBase<P2PPacket>
 
     private void SendToRouter<T>(Guid targetId, T datagram)
     {
-        using var stream = RecycleMemoryStreamManagerHolder.Shared.GetStream();
+        using var stream = PooledBufferStream.Rent(NetworkSettings.MaxMessageSize);
         Codec.Encode(datagram, stream);
 
-        stream.Seek(0, SeekOrigin.Begin);
-
-        var buffer = stream.GetBuffer();
-
-        _router.Send(targetId, buffer.AsMemory(0, (int)stream.Length));
+        _router.Send(targetId, stream.Memory);
     }
 
     /// <summary>

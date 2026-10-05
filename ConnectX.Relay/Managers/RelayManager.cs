@@ -132,7 +132,8 @@ public partial class RelayManager : BackgroundService
         session.OnMessageReceived -= _dispatcher.Dispatch;
         var input = new RelayWorkerInput(_actor, session);
         _workerInputs[session.Id] = input;
-        session.OnMessageReceived += input.Receive;
+        if (session is IBorrowedBufferSession borrowed) borrowed.ReceiveHandler = input.ReceiveAsync;
+        else session.OnMessageReceived += input.Receive;
         return true;
     }
 
@@ -228,7 +229,8 @@ public partial class RelayManager : BackgroundService
     {
         if (_workerInputs.Remove(session.Id, out var input))
         {
-            session.OnMessageReceived -= input.Receive;
+            if (session is IBorrowedBufferSession borrowed) borrowed.ReceiveHandler = null;
+            else session.OnMessageReceived -= input.Receive;
             input.Close();
         }
         _actor.Close(session);

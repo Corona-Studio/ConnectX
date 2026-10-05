@@ -26,6 +26,9 @@ internal sealed class SessionTransportHub(CancellationToken lifetime, ILogger lo
         }
     }
 
+    public Task<bool> FlushPendingAsync(ISession session)
+        => GetOutbox(session)?.FlushPendingAsync() ?? Task.FromResult(false);
+
     public void Prepare(ISession session) => GetOutbox(session);
 
     public void Send<T>(IDispatcher dispatcher, ISession session, T message, bool closeAfter = false)

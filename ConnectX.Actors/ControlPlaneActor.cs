@@ -67,6 +67,8 @@ public sealed class ControlPlaneActor(ILogger<ControlPlaneActor> logger) : Backg
     }
 
     // Raw forwarding is an I/O boundary operation against an immutable route snapshot.
+    public Task<bool> FlushPendingOutputAsync(ISession session) => Transport.FlushPendingAsync(session);
+
     public void SendRaw(ISession session, byte[] payload) => _transport?.SendRaw(session, payload);
 
     public void Close(ISession session) { AssertAccess(); Transport.Close(session); }

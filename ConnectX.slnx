@@ -4,6 +4,10 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
+  <Folder Name="/Tools/">
+    <Project Path="tools/BorrowedBufferProbe/BorrowedBufferProbe.csproj" />
+    <Project Path="tools/BorrowedBufferTests/BorrowedBufferTests.csproj" />
+  </Folder>
   <Folder Name="/ExternalLibs/" />
   <Folder Name="/ExternalLibs/Hive/">
     <Project Path="Hive.Framework/Hive.Both.General/Hive.Both.General.csproj" />
