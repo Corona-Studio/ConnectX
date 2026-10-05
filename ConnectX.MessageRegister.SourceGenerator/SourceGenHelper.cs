@@ -38,6 +38,7 @@ public static class SourceGenHelper
     {
         var result = new List<StatementSyntax>();
 
+        var formatterIndex = 0;
         foreach (var type in packetTypes)
         {
             var statement = ExpressionStatement(
@@ -55,14 +56,14 @@ public static class SourceGenHelper
 
             result.Add(statement);
 
-            // Merely storing typeof(T) does not trigger MemoryPack's generated
-            // static constructor. NativeAOT can then trim its explicit
-            // IMemoryPackFormatterRegister.RegisterFormatter implementation,
-            // making runtime Type-based deserialization fail. Run the static
-            // constructor while registering each packet so the formatter is
-            // rooted and installed before the first packet arrives.
+            // Non-generic formatter types give NativeAOT concrete dispatch targets
+            // for every packet, including Type-based decoding and union members.
             result.Add(ParseStatement(
-                $"RuntimeHelpers.RunClassConstructor(typeof({type}).TypeHandle);"));
+                $"MemoryPack.MemoryPackFormatterProvider.Register(new PacketFormatter{formatterIndex++}());"));
+            // Call the generated registration interface directly so NativeAOT
+            // roots each concrete formatter before Type-based decoding.
+            result.Add(ParseStatement(
+                $"MemoryPack.MemoryPackFormatterProvider.Register<{type}>();"));
         }
 
         return result;
@@ -115,7 +116,7 @@ public static class SourceGenHelper
                         ))));
     }
 
-    private static SyntaxList<MemberDeclarationSyntax> GetClassDecl(IEnumerable<string> packetTypes, string assemblyName)
+    private static SyntaxList<MemberDeclarationSyntax> GetClassDecl(IEnumerable<string> packetTypes, string assemblyName, ISet<string> valueTypes)
     {
         return SingletonList<MemberDeclarationSyntax>(
             FileScopedNamespaceDeclaration(
@@ -125,13 +126,44 @@ public static class SourceGenHelper
                         ClassDeclaration($"{assemblyName.Replace(".", string.Empty)}PacketRegisterHelper")
                             .WithModifiers(
                                 TokenList(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.StaticKeyword)))
-                            .WithMembers(GetMethodBody(packetTypes, assemblyName)))));
+                            .WithMembers(GetMethodBody(packetTypes, assemblyName)
+                                .Add(GetValidationMethod(packetTypes, assemblyName))
+                                .AddRange(GetFormatters(packetTypes, valueTypes))))));
     }
 
-    public static CompilationUnitSyntax GetCompleteDecl(IEnumerable<string> packetTypes, string assemblyName)
+    private static MemberDeclarationSyntax GetValidationMethod(IEnumerable<string> packetTypes, string assemblyName)
+    {
+        var body = new System.Text.StringBuilder();
+        foreach (var type in packetTypes)
+        {
+            body.AppendLine($"MemoryPack.MemoryPackFormatterProvider.Register<{type}>();");
+            body.AppendLine($"_ = MemoryPack.MemoryPackSerializer.Deserialize(typeof({type}), MemoryPack.MemoryPackSerializer.Serialize<{type}>(default));");
+        }
+
+        return ParseMemberDeclaration($"public static void Validate{assemblyName.Replace(".", string.Empty)}PacketFormatters() {{ {body} }}")!;
+    }
+
+    private static IEnumerable<MemberDeclarationSyntax> GetFormatters(IEnumerable<string> packetTypes, ISet<string> valueTypes)
+    {
+        var index = 0;
+        foreach (var type in packetTypes)
+        {
+            var valueType = valueTypes.Contains(type) ? type : type + "?";
+            yield return ParseMemberDeclaration($@"
+private sealed class PacketFormatter{index++} : MemoryPack.MemoryPackFormatter<{type}>
+{{
+    public override void Serialize<TBufferWriter>(ref MemoryPack.MemoryPackWriter<TBufferWriter> writer, scoped ref {valueType} value)
+        => writer.WritePackable(value);
+    public override void Deserialize(ref MemoryPack.MemoryPackReader reader, scoped ref {valueType} value)
+        => reader.ReadPackable(ref value);
+}}")!;
+        }
+    }
+
+    public static CompilationUnitSyntax GetCompleteDecl(IEnumerable<string> packetTypes, string assemblyName, ISet<string> valueTypes)
     {
         return CompilationUnit()
             .WithUsings(GetUsings())
-            .WithMembers(GetClassDecl(packetTypes, assemblyName));
+            .WithMembers(GetClassDecl(packetTypes, assemblyName, valueTypes));
     }
 }

@@ -14,7 +14,12 @@ public class SessionPlaceHolder : ISession
     public IPEndPoint LocalEndPoint => new(0, 0);
     public IPEndPoint RemoteEndPoint => new(0, 0);
 
-    public event SessionReceivedHandler? OnMessageReceived;
+    // A placeholder never receives messages and must not retain subscribers.
+    public event SessionReceivedHandler? OnMessageReceived
+    {
+        add { }
+        remove { }
+    }
 
     public Task StartAsync(CancellationToken token)
     {

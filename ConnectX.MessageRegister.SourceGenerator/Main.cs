@@ -24,11 +24,14 @@ public class PacketRegisterSourceGenerator : IIncrementalGenerator
             var (compilation, classes) = source;
 
             var packetTypes = classes
+                .OfType<INamedTypeSymbol>()
                 .Select(typeSymbol => typeSymbol.ToDisplayString())
                 .ToList();
 
             var assemblyName = compilation.AssemblyName ?? "Generated";
-            var generated = SourceGenHelper.GetCompleteDecl(packetTypes, assemblyName);
+            var generated = SourceGenHelper.GetCompleteDecl(packetTypes, assemblyName,
+                new System.Collections.Generic.HashSet<string>(classes.OfType<INamedTypeSymbol>()
+                    .Where(type => type.IsValueType).Select(type => type.ToDisplayString())));
 
             var codeString = generated.NormalizeWhitespace().ToFullString();
             spc.AddSource("PacketRegisterHelper.cs", SourceText.From(codeString, Encoding.UTF8));
