@@ -10,10 +10,19 @@ namespace ConnectX.Relay.Managers;
 /// until the reverse handshake is ready. Legacy streams use a bounded startup buffer.
 /// Business routing decisions are made exclusively by the control actor.
 /// </summary>
-internal sealed class RelayWorkerInput(ControlPlaneActor actor, ISession source)
+internal sealed class RelayWorkerInput(ControlPlaneActor actor, ISession source, TimeProvider clock)
 {
     private readonly object _gate = new();
+    internal const int MaxBufferedBytes = 1024 * 1024;
     private readonly Queue<byte[]> _pending = new();
+    private int _pendingBytes;
+    private long _unpairedSince = clock.GetTimestamp();
+
+    public bool IsPairingTimeoutExceeded()
+    {
+        lock (_gate)
+            return !_closed && _destination == null && clock.GetElapsedTime(_unpairedSince) >= TimeSpan.FromSeconds(30);
+    }
     private ISession? _destination;
     private bool _closed;
     private TaskCompletionSource _routeReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -26,6 +35,7 @@ internal sealed class RelayWorkerInput(ControlPlaneActor actor, ISession source)
             if (_closed) return;
             if (ReferenceEquals(_destination, destination)) return;
             _destination = destination;
+            if (destination == null) _unpairedSince = clock.GetTimestamp();
             if (source is IBorrowedBufferSession)
             {
                 if (destination == null)
@@ -42,7 +52,10 @@ internal sealed class RelayWorkerInput(ControlPlaneActor actor, ISession source)
                 return;
             }
             if (destination != null)
+            {
                 while (_pending.TryDequeue(out var payload)) actor.SendRaw(destination, payload);
+                _pendingBytes = 0;
+            }
         }
     }
 
@@ -81,21 +94,32 @@ internal sealed class RelayWorkerInput(ControlPlaneActor actor, ISession source)
 
     public void Receive(ISession session, ReadOnlySequence<byte> buffer)
     {
-        // Hive owns receive buffers only for this callback.
-        var payload = buffer.ToArray();
+        // Bound bytes before copying the borrowed receive buffer, including a single oversized frame.
         var overflow = false;
         lock (_gate)
         {
             if (_closed) return;
-            if (_destination != null) actor.SendRaw(_destination, payload);
-            else if (_pending.Count < 128) _pending.Enqueue(payload);
-            else { _closed = true; _pending.Clear(); overflow = true; }
+            if (buffer.Length > MaxBufferedBytes ||
+                (_destination == null && (_pending.Count >= 128 || buffer.Length > MaxBufferedBytes - _pendingBytes)))
+            {
+                _closed = true;
+                _destination = null;
+                _pending.Clear();
+                _pendingBytes = 0;
+                overflow = true;
+            }
+            else
+            {
+                var payload = buffer.ToArray();
+                if (_destination != null) actor.SendRaw(_destination, payload);
+                else { _pending.Enqueue(payload); _pendingBytes += payload.Length; }
+            }
         }
         if (overflow) SessionHealth.Close(source);
     }
 
     public void Close()
     {
-        lock (_gate) { _closed = true; _destination = null; _pending.Clear(); _routeReady.TrySetResult(); }
+        lock (_gate) { _closed = true; _destination = null; _pending.Clear(); _pendingBytes = 0; _outputReady = null; _routeReady.TrySetResult(); }
     }
 }

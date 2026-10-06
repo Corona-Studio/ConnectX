@@ -12,6 +12,8 @@ namespace ConnectX.Server.Managers;
 
 public partial class RelayServerManager
 {
+    partial void DisposeActorResources() { _clientManager.OnSessionDisconnected -= ClientManagerOnOnSessionDisconnected; }
+
     private readonly ClientManager _clientManager;
     private readonly IServerSettingProvider _serverSettingProvider;
     private readonly IDispatcher _dispatcher;
@@ -95,12 +97,13 @@ public partial class RelayServerManager
             return;
         }
 
-        if (!_sessionMapping.TryAdd(sessionUserId, session) ||
-            !_sessionIdMapping.TryAdd(id, sessionUserId))
+        if (_sessionMapping.ContainsKey(sessionUserId) || _sessionIdMapping.ContainsKey(id))
         {
             _logger.LogRelayServerManagerFailedToAddSessionToSessionMapping(id);
             return;
         }
+        _sessionMapping.Add(sessionUserId, session);
+        _sessionIdMapping.Add(id, sessionUserId);
     }
 
     private void ClientManagerOnOnSessionDisconnected(SessionId sessionId)

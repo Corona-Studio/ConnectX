@@ -1,5 +1,7 @@
+using Microsoft.EntityFrameworkCore;
 using ConnectX.Actors;
 using System.Collections.Concurrent;
+using System.Threading.Channels;
 using System.Collections.Frozen;
 using ConnectX.Server.Managers;
 using ConnectX.Server.Models.Contexts;
@@ -14,10 +16,10 @@ namespace ConnectX.Server.Services;
 
 public partial class RoomJoinRecordService : BackgroundService
 {
-    private record FetchedRoomInfo(Guid UserId, Guid RoomId, UpdateRoomMemberNetworkInfo Info);
+    private record FetchedRoomInfo(Guid UserId, Guid RoomId, UpdateRoomMemberNetworkInfo Info, DateTime ExpiresAt, Guid HistoryId, int Failures = 0);
 
     private readonly ConcurrentDictionary<Guid, DateTime> _lastRefreshTimes = new();
-    private readonly ConcurrentQueue<FetchedRoomInfo> _roomInfoUpdateQueue = [];
+    private readonly Channel<FetchedRoomInfo> _roomInfoUpdateQueue = Channel.CreateBounded<FetchedRoomInfo>(1024);
 
     private readonly GroupManager _groupManager;
     private readonly PeerInfoService _peerInfoService;
@@ -53,51 +55,38 @@ public partial class RoomJoinRecordService : BackgroundService
             (DateTime.UtcNow - time).TotalSeconds < 5)
             return;
 
-        var roomInfo = new FetchedRoomInfo(userId, roomId, ctx.Message);
+        var roomInfo = new FetchedRoomInfo(userId, roomId, ctx.Message, DateTime.UtcNow.AddMinutes(5), Guid.CreateVersion7());
 
-        _lastRefreshTimes[userId] = DateTime.UtcNow;
-        _roomInfoUpdateQueue.Enqueue(roomInfo);
+        if (_roomInfoUpdateQueue.Writer.TryWrite(roomInfo)) _lastRefreshTimes[userId] = DateTime.UtcNow;
+        else _logger.LogWarning("Room join history queue is full or stopped; record for {UserId} rejected", userId);
     }
 
     private void RefreshTimeCleanup()
     {
         var now = DateTime.UtcNow;
-        var toRemove = new List<Guid>();
-
-        foreach (var (userId, time) in _lastRefreshTimes)
-        {
-            if ((now - time).TotalMinutes < 5) continue;
-            toRemove.Add(userId);
-        }
-
-        foreach (var userId in toRemove)
-            _lastRefreshTimes.TryRemove(userId, out _);
+        foreach (var entry in _lastRefreshTimes)
+            if ((now - entry.Value).TotalMinutes >= 5)
+                ((ICollection<KeyValuePair<Guid, DateTime>>)_lastRefreshTimes).Remove(entry);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await using var scope = _serviceScopeFactory.CreateAsyncScope();
-
-        var dbContext = scope.ServiceProvider.GetRequiredService<RoomOpsHistoryContext>();
-        var groupManager = scope.ServiceProvider.GetRequiredService<GroupManager>();
-
         while (!stoppingToken.IsCancellationRequested)
         {
-            if (_roomInfoUpdateQueue.IsEmpty)
-            {
-                await Task.Delay(500, stoppingToken);
-                continue;
-            }
-
+            // Cleanup also runs while the queue is idle; conditional removal preserves newer updates.
             RefreshTimeCleanup();
-
-            if (!_roomInfoUpdateQueue.TryDequeue(out var update))
+            if (!_roomInfoUpdateQueue.Reader.TryRead(out var update))
             {
                 await Task.Delay(500, stoppingToken);
                 continue;
             }
+            if (DateTime.UtcNow >= update.ExpiresAt)
+            {
+                _logger.LogWarning("Room join history expired for {UserId}", update.UserId);
+                continue;
+            }
 
-            var group = await _actor.AskAsync(() => groupManager.GetGroupSnapshot(update.RoomId), stoppingToken);
+            var group = await _actor.AskAsync(() => _groupManager.GetGroupSnapshot(update.RoomId), stoppingToken);
             if (group == null)
             {
                 _logger.LogFailedToGetGroup(update.RoomId);
@@ -110,7 +99,7 @@ public partial class RoomJoinRecordService : BackgroundService
             if (peerInfo?.Paths == null || peerInfo.Paths.Length == 0)
             {
                 _logger.LogPeerInfoNotFound(update.Info.NetworkNodeId);
-                _roomInfoUpdateQueue.Enqueue(update);
+                Requeue(update);
 
                 await Task.Delay(5000, stoppingToken);
                 continue;
@@ -126,7 +115,7 @@ public partial class RoomJoinRecordService : BackgroundService
             if (addresses.Count == 0)
             {
                 _logger.LogPeerAddressNotReady(update.Info.NetworkNodeId);
-                _roomInfoUpdateQueue.Enqueue(update);
+                Requeue(update);
 
                 await Task.Delay(5000, stoppingToken);
                 continue;
@@ -134,8 +123,11 @@ public partial class RoomJoinRecordService : BackgroundService
 
             try
             {
+                await using var scope = _serviceScopeFactory.CreateAsyncScope();
+                var dbContext = scope.ServiceProvider.GetRequiredService<RoomOpsHistoryContext>();
                 var joinHistory = new RoomJoinHistory
                 {
+                    Id = update.HistoryId,
                     UserId = update.UserId,
                     RoomId = update.RoomId,
                     LogTime = DateTime.UtcNow,
@@ -144,17 +136,44 @@ public partial class RoomJoinRecordService : BackgroundService
                     UserPhysicalAddress = string.Join(',', addresses)
                 };
 
-                dbContext.RoomJoinHistories.Add(joinHistory);
-                await dbContext.SaveChangesAsync(stoppingToken);
+                if (!await dbContext.RoomJoinHistories.AnyAsync(x => x.Id == update.HistoryId, stoppingToken))
+                {
+                    dbContext.RoomJoinHistories.Add(joinHistory);
+                    await dbContext.SaveChangesAsync(stoppingToken);
+                }
 
                 _logger.LogRoomJoinRecordAdded(update.UserId, update.RoomId, update.Info.NetworkNodeId, joinHistory.UserPhysicalAddress);
             }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
             catch (Exception e)
             {
-                _roomInfoUpdateQueue.Enqueue(update);
+                if (update.Failures < 2) Requeue(update with { Failures = update.Failures + 1 });
+                else _logger.LogError("Room join history abandoned after 3 database failures for {UserId}", update.UserId);
                 _logger.LogFailedToAddJoinRecordToDatabase(e);
+                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
             }
         }
+    }
+
+    private void Requeue(FetchedRoomInfo update)
+    {
+        if (DateTime.UtcNow < update.ExpiresAt && _roomInfoUpdateQueue.Writer.TryWrite(update)) return;
+        _logger.LogWarning("Room join history expired or retry queue is full for {UserId}", update.UserId);
+    }
+
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        _roomInfoUpdateQueue.Writer.TryComplete();
+        await base.StopAsync(cancellationToken);
+        while (_roomInfoUpdateQueue.Reader.TryRead(out _)) { }
+        _lastRefreshTimes.Clear();
+    }
+
+    partial void DisposeActorResources()
+    {
+        _roomInfoUpdateQueue.Writer.TryComplete();
+        while (_roomInfoUpdateQueue.Reader.TryRead(out _)) { }
+        _lastRefreshTimes.Clear();
     }
 }
 

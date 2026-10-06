@@ -49,6 +49,12 @@ internal sealed class SessionOutbox
         }
         catch (OperationCanceledException) { }
         catch (Exception exception) { logger.LogOutboxFailed(exception); }
-        finally { Complete(); SessionHealth.Close(_session); }
+        finally
+        {
+            Complete();
+            // A failed send leaves queued closures holding messages, payloads and peer sessions.
+            while (_queue.Reader.TryRead(out _)) { }
+            SessionHealth.Close(_session);
+        }
     }
 }

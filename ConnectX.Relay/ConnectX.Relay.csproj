@@ -38,4 +38,5 @@
     <ProjectReference Include="..\Hive.Framework\Hive.Network.Udp\Hive.Network.Udp.csproj" />
   </ItemGroup>
 
+  <ItemGroup><InternalsVisibleTo Include="ConnectX.Tests" /></ItemGroup>
 </Project>

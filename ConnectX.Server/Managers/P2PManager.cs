@@ -11,6 +11,8 @@ namespace ConnectX.Server.Managers;
 
 public partial class P2PManager : BackgroundService
 {
+    partial void DisposeActorResources() { _clientManager.OnSessionDisconnected -= ClientManagerOnSessionDisconnected; }
+
     private readonly ClientManager _clientManager;
     private readonly Dictionary<(int Bargain, Guid RequesterId, Guid TargetId),
         (ISession Session, P2PConRequest Request, long CreatedAt)> _conRequests = new();
@@ -207,11 +209,13 @@ public partial class P2PManager : BackgroundService
     {
         _actor.AssertAccess();
         if (!signinMessage.JoinP2PNetwork) return;
-        if (!_userSessionMappings.TryAdd(userId, session) ||
-            !_sessionIdMapping.TryAdd(session.Id, userId))
+        if (_userSessionMappings.ContainsKey(userId) || _sessionIdMapping.ContainsKey(session.Id))
         {
             _logger.LogP2PFailedToAddSessionToSessionMapping(session.Id);
+            return;
         }
+        _userSessionMappings.Add(userId, session);
+        _sessionIdMapping.Add(session.Id, userId);
     }
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

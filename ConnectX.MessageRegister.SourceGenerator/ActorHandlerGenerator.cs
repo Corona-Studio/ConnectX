@@ -59,9 +59,9 @@ public sealed class ActorHandlerGenerator : IIncrementalGenerator
                     code.Append("_actorHandlerIds.Add(dispatcher.AddHandler<").Append(message).Append(">(ctx => { if (!actor.TryPost(new ActorCommand")
                         .Append(i).Append("(this, ctx))) global::ConnectX.Actors.SessionHealth.Close(ctx.FromSession); }));\n");
                 }
-                code.Append("}\npublic ").Append(background ? "override " : "").Append("void Dispose()\n{\nif (_actorDispatcher != null) foreach (var id in _actorHandlerIds) _actorDispatcher.RemoveHandler(id);\n_actorHandlerIds.Clear();\n");
+                code.Append("}\npublic ").Append(background ? "override " : "").Append("void Dispose()\n{\nif (_actorDispatcher != null) foreach (var id in _actorHandlerIds) _actorDispatcher.RemoveHandler(id);\n_actorHandlerIds.Clear();\nDisposeActorResources();\n");
                 if (background) code.Append("base.Dispose();\n");
-                code.Append("}\n");
+                code.Append("}\npartial void DisposeActorResources();\n");
                 for (var i = 0; i < ordered.Length; i++)
                 {
                     var method = ordered[i];

@@ -14,6 +14,8 @@ namespace ConnectX.Server.Managers;
 
 public partial class InterconnectServerManager
 {
+    partial void DisposeActorResources() { _clientManager.OnSessionDisconnected -= OnClientSessionDisconnected; }
+
     private readonly Dictionary<SessionId, InterconnectServerRegistration> _registerServerInfo = [];
     private readonly Dictionary<SessionId, ISession> _sessionMapping = new();
 

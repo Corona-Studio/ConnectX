@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+using Microsoft.EntityFrameworkCore;
+using System.Threading.Channels;
 using ConnectX.Server.Models.Contexts;
 using ConnectX.Server.Models.DataBase;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,7 +20,7 @@ public record RoomRecord(
 
 public class RoomCreationRecordService : BackgroundService
 {
-    private readonly ConcurrentQueue<RoomRecord> _roomRecords = new();
+    private readonly Channel<RoomRecord> _roomRecords = Channel.CreateBounded<RoomRecord>(1024);
 
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly ILogger<RoomCreationRecordService> _logger;
@@ -34,55 +35,66 @@ public class RoomCreationRecordService : BackgroundService
 
     public void CreateRecord(RoomRecord roomRecord)
     {
-        _roomRecords.Enqueue(roomRecord);
+        if (!_roomRecords.Writer.TryWrite(roomRecord))
+            _logger.LogWarning("Room creation history queue is full or stopped; record for {RoomId} rejected", roomRecord.RoomId);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await using var scope = _serviceScopeFactory.CreateAsyncScope();
-
-        var dbContext = scope.ServiceProvider.GetRequiredService<RoomOpsHistoryContext>();
-
-        while (!stoppingToken.IsCancellationRequested)
+        await foreach (var roomRecord in _roomRecords.Reader.ReadAllAsync(stoppingToken))
         {
-            if (_roomRecords.IsEmpty)
+            var history = new RoomCreateHistory
             {
-                await Task.Delay(500, stoppingToken);
-                continue;
-            }
+                CreatedBy = roomRecord.CreatedBy,
+                CreatedTime = roomRecord.CreatedTime,
+                RoomId = roomRecord.RoomId,
+                RoomName = roomRecord.RoomName,
+                UserDisplayName = roomRecord.UserDisplayName,
+                RoomDescription = roomRecord.RoomDescription,
+                RoomPassword = roomRecord.RoomPassword,
+                MaxUserCount = roomRecord.MaxUserCount
+            };
 
-            if (!_roomRecords.TryDequeue(out var roomRecord))
+            for (var attempt = 0; attempt < 3; attempt++)
             {
-                await Task.Delay(500, stoppingToken);
-                continue;
-            }
-
-            try
-            {
-                var history = new RoomCreateHistory
+                try
                 {
-                    CreatedBy = roomRecord.CreatedBy,
-                    CreatedTime = roomRecord.CreatedTime,
-                    RoomId = roomRecord.RoomId,
-                    RoomName = roomRecord.RoomName,
-                    UserDisplayName = roomRecord.UserDisplayName,
-                    RoomDescription = roomRecord.RoomDescription,
-                    RoomPassword = roomRecord.RoomPassword,
-                    MaxUserCount = roomRecord.MaxUserCount
-                };
-
-                dbContext.RoomCreateHistories.Add(history);
-                await dbContext.SaveChangesAsync(stoppingToken);
-
-                _logger.LogRoomCreationHistoryCreated(roomRecord.CreatedBy, roomRecord.RoomName,
-                    roomRecord.UserDisplayName);
-            }
-            catch (Exception e)
-            {
-                _roomRecords.Enqueue(roomRecord);
-                _logger.LogFailedToAddCreationRecordToDatabase(e);
+                    // A fresh unit of work releases tracked entities on both success and failure.
+                    await using var scope = _serviceScopeFactory.CreateAsyncScope();
+                    var dbContext = scope.ServiceProvider.GetRequiredService<RoomOpsHistoryContext>();
+                    // Keep the ID across retries, including an ambiguous database acknowledgement.
+                    if (!await dbContext.RoomCreateHistories.AnyAsync(x => x.Id == history.Id, stoppingToken))
+                    {
+                        dbContext.RoomCreateHistories.Add(history);
+                        await dbContext.SaveChangesAsync(stoppingToken);
+                    }
+                    _logger.LogRoomCreationHistoryCreated(roomRecord.CreatedBy, roomRecord.RoomName, roomRecord.UserDisplayName);
+                    break;
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
+                catch (Exception e)
+                {
+                    _logger.LogFailedToAddCreationRecordToDatabase(e);
+                    if (attempt == 2)
+                        _logger.LogError("Room creation history abandoned after 3 attempts for {RoomId}", roomRecord.RoomId);
+                    else await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                }
             }
         }
+    }
+
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        _roomRecords.Writer.TryComplete();
+        await base.StopAsync(cancellationToken);
+        while (_roomRecords.Reader.TryRead(out _)) { }
+    }
+
+    public override void Dispose()
+    {
+        _roomRecords.Writer.TryComplete();
+        while (_roomRecords.Reader.TryRead(out _)) { }
+        base.Dispose();
     }
 }
 

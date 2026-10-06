@@ -89,13 +89,17 @@ internal sealed class SessionTransportHub(CancellationToken lifetime, ILogger lo
         }
     }
 
-    public Task StopAsync()
+    public async Task StopAsync()
     {
+        Task[] pending;
         lock (_gate)
         {
             _stopping = true;
             foreach (var outbox in _outboxes.Values) outbox.Complete();
-            return Task.WhenAll(_outboxes.Values.Select(x => x.Completion).Concat(_retired));
+            pending = _outboxes.Values.Select(x => x.Completion).Concat(_retired).ToArray();
+            _outboxes.Clear();
+            _retired.Clear();
         }
+        await Task.WhenAll(pending).ConfigureAwait(false);
     }
 }

@@ -14,6 +14,8 @@ namespace ConnectX.Relay.Managers;
 /// <summary>Control state belongs to the actor; stream input/output adapters own all cross-thread I/O.</summary>
 public partial class RelayManager : BackgroundService
 {
+    partial void DisposeActorResources() { _clientManager.OnSessionDisconnected -= OnDisconnected; }
+
     private sealed record PendingLink(ISession Session, Guid User, Guid? Target, Guid Room, long Started);
     private readonly Dictionary<SessionId, PendingLink> _pendingLinks = [];
     private readonly Dictionary<SessionId, RelayWorkerInput> _workerInputs = [];
@@ -130,7 +132,7 @@ public partial class RelayManager : BackgroundService
         _workers[pair] = session;
         _actor.PrepareOutput(session);
         session.OnMessageReceived -= _dispatcher.Dispatch;
-        var input = new RelayWorkerInput(_actor, session);
+        var input = new RelayWorkerInput(_actor, session, _clock);
         _workerInputs[session.Id] = input;
         if (session is IBorrowedBufferSession borrowed) borrowed.ReceiveHandler = input.ReceiveAsync;
         else session.OnMessageReceived += input.Receive;
@@ -236,25 +238,28 @@ public partial class RelayManager : BackgroundService
         _actor.Close(session);
     }
 
+    internal void SweepLinks()
+    {
+        _actor.AssertAccess();
+        CompletePendingLinks();
+        var changed = false;
+        foreach (var (pair, session) in _workers.ToArray())
+            if (!SessionHealth.IsConnected(session) || _workerInputs[session.Id].IsPairingTimeoutExceeded())
+            {
+                _workers.Remove(pair);
+                CloseWorker(session);
+                changed = true;
+            }
+        if (changed) PublishRoutes();
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1), _clock);
         try
         {
             while (await timer.WaitForNextTickAsync(stoppingToken))
-                await _actor.InvokeAsync(() =>
-                {
-                    CompletePendingLinks();
-                    var changed = false;
-                    foreach (var (pair, session) in _workers.ToArray())
-                        if (!SessionHealth.IsConnected(session))
-                        {
-                            _workers.Remove(pair);
-                            CloseWorker(session);
-                            changed = true;
-                        }
-                    if (changed) PublishRoutes();
-                }, stoppingToken);
+                await _actor.InvokeAsync(SweepLinks, stoppingToken);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
     }

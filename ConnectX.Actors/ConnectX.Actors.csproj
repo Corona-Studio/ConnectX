@@ -5,4 +5,5 @@
     <ProjectReference Include="../Hive.Framework/Hive.Both.General/Hive.Both.General.csproj" />
     <ProjectReference Include="../Hive.Framework/Hive.Network.Tcp/Hive.Network.Tcp.csproj" />
   </ItemGroup>
+  <ItemGroup><InternalsVisibleTo Include="ConnectX.Tests" /></ItemGroup>
 </Project>

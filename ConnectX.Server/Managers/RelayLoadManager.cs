@@ -9,6 +9,8 @@ namespace ConnectX.Server.Managers;
 
 public partial class RelayLoadManager
 {
+    partial void DisposeActorResources() { _clientManager.OnSessionDisconnected -= OnSessionDisconnected; }
+
     private readonly ClientManager _clientManager;
     private readonly RelayServerManager _relayServers;
 

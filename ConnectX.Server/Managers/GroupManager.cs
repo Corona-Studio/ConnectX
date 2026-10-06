@@ -23,6 +23,8 @@ namespace ConnectX.Server.Managers;
 
 public partial class GroupManager
 {
+    partial void DisposeActorResources() { _clientManager.OnSessionDisconnected -= ClientManagerOnSessionDisconnected; }
+
     private readonly IZeroTierNodeInfoService? _zeroTierNodeInfoService;
     private readonly RelayServerManager _relayServerManager;
     private readonly RelayLoadManager _relayLoadManager;
@@ -97,13 +99,14 @@ public partial class GroupManager
             JoinP2PNetwork = signinMessage.JoinP2PNetwork
         };
 
-        if (!_userMapping.TryAdd(assignedId, user) ||
-            !_sessionIdMapping.TryAdd(id, assignedId))
+        if (_userMapping.ContainsKey(assignedId) || _sessionIdMapping.ContainsKey(id))
         {
             _logger.LogGroupManagerFailedToAddSessionToSessionMapping(id);
             return Guid.Empty;
         }
 
+        _userMapping.Add(assignedId, user);
+        _sessionIdMapping.Add(id, assignedId);
         _logger.LogSessionAttached(signinMessage.DisplayName, id, assignedId);
 
         return assignedId;
