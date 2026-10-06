@@ -2,6 +2,7 @@ using System.Buffers;
 
 using System.Net;
 using ConnectX.Actors;
+using ConnectX.Client.Transmission.Connections;
 using ConnectX.Relay;
 using ConnectX.Relay.Interfaces;
 using ConnectX.Relay.Services;
@@ -136,17 +137,14 @@ public sealed class NetworkIntegrationTests
             Assert.That((await datagram)!.Payload.ToArray(), Is.EqualTo(new byte[] { 1, 2, 3 }));
             var workerA = await Connect(relayAddress); var workerB = await Connect(relayAddress);
             await Request<CreateRelayWorkerLinkMessage, RelayWorkerLinkCreatedMessage>(workerA, new() { UserId = signA.UserId, RelayTo = signB.UserId, RoomId = created.RoomId });
+            workerB.OnMessageReceived -= dispatcher.Dispatch;
             var raw = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
-            workerB.OnMessageReceived += (_, bytes) =>
-            {
-                if (bytes.Length == 3 && bytes.FirstSpan[0] is 4 or 7) raw.TrySetResult(bytes.ToArray());
-            };
-            // The first worker may send before the reverse handshake. Its pipe
-            // buffer must stay alive, and the reverse acknowledgement goes first.
+            using var receiver = new RelayWorkerReceiver(workerB, clientServices.GetRequiredService<Hive.Codec.Abstractions.IPacketCodec>(),
+                (_, bytes) => raw.TrySetResult(bytes.ToArray()));
+            // The relay buffers this frame until the reverse worker is ready, then sends it directly after the ACK.
             using var payload = new MemoryStream([4, 5, 6]);
             Assert.That(await workerA.TrySendAsync(payload, lifetime.Token), Is.True);
-            await Request<CreateRelayWorkerLinkMessage, RelayWorkerLinkCreatedMessage>(workerB, new() { UserId = signB.UserId, RelayTo = signA.UserId, RoomId = created.RoomId });
-            workerB.OnMessageReceived -= dispatcher.Dispatch;
+            await receiver.EstablishAsync(new() { UserId = signB.UserId, RelayTo = signA.UserId, RoomId = created.RoomId }, lifetime.Token);
             Assert.That(await raw.Task.WaitAsync(lifetime.Token), Is.EqualTo(new byte[] { 4, 5, 6 }));
             raw = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
             using var nextPayload = new MemoryStream([7, 8, 9]);

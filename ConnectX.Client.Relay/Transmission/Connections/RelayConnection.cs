@@ -17,7 +17,6 @@ using Hive.Network.Abstractions;
 using Hive.Network.Abstractions.Session;
 using Hive.Network.Shared;
 using Hive.Network.Tcp;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Snappier;
@@ -38,7 +37,6 @@ public sealed class RelayConnection : ConnectionBase, IDatagramTransmit<RelayDat
     private readonly ClientPacketDispatcher _clientPacketDispatcher;
     private readonly IRoomInfoManager _roomInfoManager;
     private readonly IServerLinkHolder _serverLinkHolder;
-    private readonly IServiceProvider _serviceProvider;
     private readonly IConnector<TcpSession> _tcpConnector;
 
     private DateTime _lastHeartBeatTime;
@@ -46,6 +44,7 @@ public sealed class RelayConnection : ConnectionBase, IDatagramTransmit<RelayDat
     private CancellationToken _linkCt;
     private ISession? _relayServerDataLink;
     private ISession? _relayServerWorkerLink;
+    private RelayWorkerReceiver? _workerReceiver;
 
     public RelayConnection(
         Guid targetId,
@@ -65,7 +64,6 @@ public sealed class RelayConnection : ConnectionBase, IDatagramTransmit<RelayDat
         _tcpConnector = tcpConnector;
         _roomInfoManager = roomInfoManager;
         _serverLinkHolder = serverLinkHolder;
-        _serviceProvider = serviceProvider;
 
         dispatcher.AddHandler<UnwrappedRelayDatagram>(OnUnwrappedRelayDatagramReceived);
         dispatcher.AddHandler<HeartBeat>(OnHeartBeatReceived);
@@ -235,7 +233,6 @@ public sealed class RelayConnection : ConnectionBase, IDatagramTransmit<RelayDat
 
         Logger.LogEstablishingWorkerSession(_relayEndPoint);
 
-        var dispatcher = ActivatorUtilities.CreateInstance<DefaultDispatcher>(_serviceProvider);
         var session = await _tcpConnector.ConnectAsync(_relayEndPoint, token);
 
         if (session == null)
@@ -248,11 +245,8 @@ public sealed class RelayConnection : ConnectionBase, IDatagramTransmit<RelayDat
         //session.Socket!.LingerState = new LingerOption(true, 10);
         session.Socket!.NoDelay = true;
 
-        session.BindTo(dispatcher);
-
+        var receiver = new RelayWorkerReceiver(session, Codec, SessionOnOnMessageReceived);
         session.StartAsync(_linkCt).Forget();
-
-        await Task.Delay(1000, token);
 
         var linkCreationReq = new CreateRelayWorkerLinkMessage
         {
@@ -261,17 +255,9 @@ public sealed class RelayConnection : ConnectionBase, IDatagramTransmit<RelayDat
             RoomId = _roomInfoManager.CurrentGroupInfo.RoomId
         };
 
-        await dispatcher.SendAndListenOnce<CreateRelayWorkerLinkMessage, RelayWorkerLinkCreatedMessage>(
-            session,
-            linkCreationReq,
-            token);
+        await receiver.EstablishAsync(linkCreationReq, token);
 
-        await Task.Delay(1000, token);
-
-        // Switch to streaming mode
-        session.OnMessageReceived -= dispatcher.Dispatch;
-        session.OnMessageReceived += SessionOnOnMessageReceived;
-
+        _workerReceiver = receiver;
         _relayServerWorkerLink = session;
 
         return true;
@@ -382,7 +368,8 @@ public sealed class RelayConnection : ConnectionBase, IDatagramTransmit<RelayDat
 
         if (_relayServerWorkerLink != null)
         {
-            _relayServerWorkerLink.OnMessageReceived -= SessionOnOnMessageReceived;
+            _workerReceiver?.Dispose();
+            _workerReceiver = null;
             _relayServerWorkerLink.Close();
         }
 
