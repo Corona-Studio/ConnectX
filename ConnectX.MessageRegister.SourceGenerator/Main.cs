@@ -1,9 +1,7 @@
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis;
 using System.Linq;
-using System.Text;
-using Microsoft.CodeAnalysis.Text;
-using Microsoft.CodeAnalysis.CSharp;
+using Corona.SourceGeneration;
 
 namespace ConnectX.MessageRegister.SourceGenerator;
 
@@ -18,18 +16,18 @@ public sealed class PacketRegisterSourceGenerator : IIncrementalGenerator
             static (ctx, _) =>
             {
                 var type = (INamedTypeSymbol)ctx.TargetSymbol;
-                return (Name: type.ToDisplayString(), IsValue: type.IsValueType);
-            });
+                return (Name: type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), IsValue: type.IsValueType);
+            }).Collect().Select(static (models, _) => new EquatableArray<(string Name, bool IsValue)>(
+                models.Distinct().OrderBy(static model => model.Name, System.StringComparer.Ordinal)));
         var assemblyName = context.CompilationProvider.Select(static (compilation, _) => compilation.AssemblyName ?? "Generated");
-        context.RegisterSourceOutput(assemblyName.Combine(packetModels.Collect()), static (output, source) =>
+        context.RegisterSourceOutput(assemblyName.Combine(packetModels).WithTrackingName("PacketModels"), static (output, source) =>
         {
             var (name, models) = source;
             var packetTypes = models.Select(model => model.Name).Distinct()
                 .OrderBy(type => type, System.StringComparer.Ordinal).ToList();
             var valueTypes = new System.Collections.Generic.HashSet<string>(
                 models.Where(model => model.IsValue).Select(model => model.Name));
-            var generated = SourceGenHelper.GetCompleteDecl(packetTypes, name, valueTypes);
-            output.AddSource("PacketRegisterHelper.cs", SourceText.From(generated.NormalizeWhitespace().ToFullString(), Encoding.UTF8));
+            output.AddSource(new SourceFile("PacketRegisterHelper.g.cs", PacketEmitter.Emit(packetTypes, name, valueTypes)));
         });
     }
 }

@@ -1,0 +1,20 @@
+name: Source generation tests
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  generators:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.ACCESS_TOKEN || github.token }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet test ConnectX.SourceGenerator.Tests/ConnectX.SourceGenerator.Tests.csproj -c Release
+      - run: dotnet test Hive.Framework/Hive.SourceGeneration.Tests/Hive.SourceGeneration.Tests.csproj -c Release

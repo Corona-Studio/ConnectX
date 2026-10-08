@@ -10,10 +10,10 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="ConnectX.Tests" />
-    <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.2" />
-    <PackageReference Condition="'$(Configuration)' == 'Debug'" Include="ConsoleTables" Version="2.7.0" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
-    <PackageReference Include="Snappier" Version="1.3.1" />
+    <PackageReference Include="CommunityToolkit.HighPerformance" />
+    <PackageReference Condition="'$(Configuration)' == 'Debug'" Include="ConsoleTables" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Snappier" />
   </ItemGroup>
 
   <ItemGroup>

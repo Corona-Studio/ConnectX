@@ -24,6 +24,7 @@
   <Project Path="ConnectX.Client.ZeroTier/ConnectX.Client.ZeroTier.csproj" />
   <Project Path="ConnectX.ClientConsole/ConnectX.ClientConsole.csproj" />
   <Project Path="ConnectX.MessageRegister.SourceGenerator/ConnectX.MessageRegister.SourceGenerator.csproj" />
+  <Project Path="ConnectX.SourceGenerator.Tests/ConnectX.SourceGenerator.Tests.csproj" />
   <Project Path="ConnectX.Relay/ConnectX.Relay.csproj" />
   <Project Path="ConnectX.Server/ConnectX.Server.csproj" />
   <Project Path="ConnectX.Shared/ConnectX.Shared.csproj" />

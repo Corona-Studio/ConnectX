@@ -2,3 +2,6 @@
 	path = Hive.Framework
 	url = https://github.com/Corona-Studio/Hive.Framework.git
 	branch = data-sync
+[submodule "SourceGeneration"]
+	path = SourceGeneration
+	url = https://github.com/Corona-Studio/Corona.SourceGeneration.git

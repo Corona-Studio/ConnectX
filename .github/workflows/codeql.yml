@@ -51,6 +51,7 @@ jobs:
       with: 
           fetch-depth: 0
           submodules: recursive
+          token: ${{ secrets.ACCESS_TOKEN || github.token }}
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL

@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ZeroTier.Sockets" Version="1.8.4" />
+    <PackageReference Include="ZeroTier.Sockets" />
   </ItemGroup>
 
   <ItemGroup>
