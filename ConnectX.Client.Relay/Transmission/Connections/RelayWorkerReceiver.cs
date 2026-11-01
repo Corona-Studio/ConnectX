@@ -12,7 +12,7 @@ internal sealed class RelayWorkerReceiver : IDisposable
     private readonly IPacketCodec _codec;
     private readonly Action<ISession, ReadOnlySequence<byte>> _receive;
     private readonly TaskCompletionSource _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private bool _streaming;
     private bool _disposed;
 

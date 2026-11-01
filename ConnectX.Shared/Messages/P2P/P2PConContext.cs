@@ -16,7 +16,7 @@ public record P2PConContextInit
 [MemoryPackUnion(0, typeof(P2PConAccept))]
 [MemoryPackUnion(1, typeof(P2PConReady))]
 [MemoryPackUnion(2, typeof(P2PConRequest))]
-public abstract partial class P2PConContext
+public closed partial class P2PConContext
 {
     [MemoryPackConstructor]
     public P2PConContext()

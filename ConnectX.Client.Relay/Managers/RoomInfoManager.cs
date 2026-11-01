@@ -77,7 +77,7 @@ public class RoomInfoManager(
                 continue;
             }
 
-            var possibleUsers = new List<UserInfo>();
+            List<UserInfo>? possibleUsers = null;
             foreach (var user in CurrentGroupInfo.Users)
             {
                 if (user.UserId == serverLinkHolder.UserId) continue;
@@ -85,10 +85,10 @@ public class RoomInfoManager(
                 if (!roomTransportCoordinator.IsMemberReady(user)) continue;
 
                 _possiblePeers.Add(user.UserId);
-                possibleUsers.Add(user);
+                (possibleUsers ??= [with(capacity: CurrentGroupInfo.Users.Length)]).Add(user);
             }
 
-            if (possibleUsers.Count > 0)
+            if (possibleUsers is { Count: > 0 })
                 OnMemberAddressInfoUpdated?.Invoke([.. possibleUsers]);
 
             await Task.Delay(1000, stoppingToken);

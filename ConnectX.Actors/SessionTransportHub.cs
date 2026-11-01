@@ -8,7 +8,7 @@ namespace ConnectX.Actors;
 /// <summary>Thread-safe I/O boundary. No business state or actor continuations live here.</summary>
 internal sealed class SessionTransportHub(CancellationToken lifetime, ILogger logger)
 {
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly Dictionary<ISession, SessionOutbox> _outboxes = new(ReferenceEqualityComparer.Instance);
     private readonly ConditionalWeakTable<ISession, object> _closed = new();
     private readonly HashSet<Task> _retired = [];

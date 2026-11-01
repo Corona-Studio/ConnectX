@@ -17,8 +17,7 @@ namespace ConnectX.Relay;
 /// <summary>Handshake I/O is supervised; callbacks and published link state belong to the control actor.</summary>
 public partial class ServerLinkHolder : BackgroundService, IServerLinkHolder
 {
-    private sealed record LinkState(ISession? Session, bool Ready);
-    private LinkState _state = new(null, false);
+    private ServerLinkState _state = ServerLinkState.Disconnected;
     private readonly ControlPlaneActor _actor;
     private readonly TimeProvider _clock;
     private readonly IDispatcher _dispatcher;
@@ -44,8 +43,8 @@ public partial class ServerLinkHolder : BackgroundService, IServerLinkHolder
     }
 
     public ISession? ServerSession => Volatile.Read(ref _state).Session;
-    public bool IsConnected => Volatile.Read(ref _state).Ready;
-    public bool IsSignedIn => Volatile.Read(ref _state).Ready;
+    public bool IsConnected => Volatile.Read(ref _state).IsReady;
+    public bool IsSignedIn => Volatile.Read(ref _state).IsReady;
 
     public async Task ConnectAsync(CancellationToken cancellationToken)
     {
@@ -61,7 +60,7 @@ public partial class ServerLinkHolder : BackgroundService, IServerLinkHolder
             session.BindTo(_dispatcher);
             await _actor.InvokeAsync(() =>
             {
-                Volatile.Write(ref _state, new LinkState(session, false));
+                Volatile.Write(ref _state, new ServerLinkState.Handshaking(session));
                 _lastHeartbeat = _clock.GetTimestamp();
                 _actor.ObserveSession(session);
             }, timeout.Token);
@@ -87,7 +86,7 @@ public partial class ServerLinkHolder : BackgroundService, IServerLinkHolder
             {
                 if (!ReferenceEquals(ServerSession, session)) throw new IOException("Relay connection was superseded.");
                 _lastHeartbeat = _clock.GetTimestamp();
-                Volatile.Write(ref _state, new LinkState(session, true));
+                Volatile.Write(ref _state, new ServerLinkState.Registered(session));
             }, timeout.Token);
         }
         catch
@@ -95,7 +94,7 @@ public partial class ServerLinkHolder : BackgroundService, IServerLinkHolder
             await _actor.InvokeAsync(() =>
             {
                 if (session != null) _actor.Close(session);
-                if (ReferenceEquals(ServerSession, session)) Volatile.Write(ref _state, new LinkState(null, false));
+                if (ReferenceEquals(ServerSession, session)) Volatile.Write(ref _state, ServerLinkState.Disconnected);
             });
             throw;
         }
@@ -107,7 +106,7 @@ public partial class ServerLinkHolder : BackgroundService, IServerLinkHolder
     private void Disconnect()
     {
         var session = ServerSession;
-        Volatile.Write(ref _state, new LinkState(null, false));
+        Volatile.Write(ref _state, ServerLinkState.Disconnected);
         if (session != null) _actor.Close(session);
     }
 

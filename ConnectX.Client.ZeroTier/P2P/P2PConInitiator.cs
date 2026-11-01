@@ -52,7 +52,7 @@ public class P2PConInitiator : IDisposable
         {
             P2PConRequest request => request.Bargain,
             P2PConAccept accept => accept.Bargain,
-            _ => throw new ArgumentOutOfRangeException(nameof(selfContext))
+            P2PConReady or null => throw new ArgumentOutOfRangeException(nameof(selfContext))
         };
         _logger = logger;
         _cancellationTokenSource = new CancellationTokenSource();
@@ -88,23 +88,28 @@ public class P2PConInitiator : IDisposable
                 _completionSource.TrySetResult(null);
             });
 
-        switch (_selfContext)
+        await (_selfContext switch
         {
-            case P2PConRequest req:
-                _logger.LogSendingP2PConRequest(_partnerId);
-                await _serverLink.Dispatcher.SendAsync(_serverLink.Session, req);
-                break;
-            case P2PConAccept accept:
-                _logger.LogSendingP2PConAccept(_partnerId);
-                await _serverLink.Dispatcher.SendAsync(_serverLink.Session, accept);
-                break;
-            default:
-                throw new InvalidOperationException("Invalid P2PConContext type");
-        }
+            P2PConRequest request => SendRequestAsync(request),
+            P2PConAccept accept => SendAcceptAsync(accept),
+            P2PConReady => throw new InvalidOperationException("Invalid P2PConContext type")
+        });
 
         _logger.LogStartedToEstablishP2PConnectionWithPartnerId(_partnerId);
 
         return await _completionSource.Task;
+    }
+
+    private ValueTask<bool> SendRequestAsync(P2PConRequest request)
+    {
+        _logger.LogSendingP2PConRequest(_partnerId);
+        return _serverLink.Dispatcher.SendAsync(_serverLink.Session, request);
+    }
+
+    private ValueTask<bool> SendAcceptAsync(P2PConAccept accept)
+    {
+        _logger.LogSendingP2PConAccept(_partnerId);
+        return _serverLink.Dispatcher.SendAsync(_serverLink.Session, accept);
     }
 
     private static async Task<ISession?> CreateDirectLinkToPartnerAsync(P2PLinkMaker linkMaker)
