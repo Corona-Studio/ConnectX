@@ -15,5 +15,5 @@ jobs:
           token: ${{ secrets.ACCESS_TOKEN || github.token }}
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '11.0.100'
       - run: dotnet test ConnectX.Tests/ConnectX.Tests.csproj -c Release --nologo
