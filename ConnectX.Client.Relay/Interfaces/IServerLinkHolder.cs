@@ -9,6 +9,7 @@ public interface IServerLinkHolder : IHostedService
     ISession? ServerSession { get; }
     bool IsConnected { get; }
     bool IsSignedIn { get; }
+    bool LastDisconnectWasRequested => false;
     Guid UserId { get; }
 
     event Action OnServerLinkDisconnected;

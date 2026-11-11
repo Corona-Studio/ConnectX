@@ -99,6 +99,10 @@ public sealed class ActorDispatcher(IPacketCodec codec, ILogger<ActorDispatcher>
     {
         using var stream = new MemoryStream();
         codec.Encode(message, stream);
+        // A stream send completes when its pipe is filled. Send-and-close callers
+        // need the framed payload to reach the socket before the session closes.
+        if (session is IBorrowedBufferSession borrowed && stream.TryGetBuffer(out var payload))
+            return await borrowed.TrySendAsync(new ReadOnlySequence<byte>(payload.AsMemory()), cancellationToken);
         return await session.TrySendAsync(stream, cancellationToken);
     }
 }

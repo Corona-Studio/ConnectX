@@ -21,6 +21,10 @@ public class ServerLinkHolder : BackgroundService, IServerLinkHolder
     private readonly IConnector<TcpSession> _tcpConnector;
 
     private DateTime _lastHeartBeatTime;
+    private CancellationTokenSource? _livenessCancellation;
+    private Task? _livenessTask;
+    private ISession? _requestedDisconnectSession;
+    private readonly SemaphoreSlim _connectionLock = new(1, 1);
 
     public ServerLinkHolder(
         IDispatcher dispatcher,
@@ -42,11 +46,23 @@ public class ServerLinkHolder : BackgroundService, IServerLinkHolder
     public ISession? ServerSession { get; private set; }
     public bool IsConnected { get; private set; }
     public bool IsSignedIn { get; private set; }
+    public bool LastDisconnectWasRequested { get; private set; }
     public Guid UserId { get; private set; }
 
     public event Action? OnServerLinkDisconnected;
 
     public async Task<SigninResult?> ConnectAsync(CancellationToken cancellationToken)
+    {
+        await _connectionLock.WaitAsync(cancellationToken);
+        try
+        {
+            await DisconnectCoreAsync(true, cancellationToken);
+            return await ConnectCoreAsync(cancellationToken);
+        }
+        finally { _connectionLock.Release(); }
+    }
+
+    private async Task<SigninResult?> ConnectCoreAsync(CancellationToken cancellationToken)
     {
         _logger.LogConnectingToServer();
 
@@ -79,12 +95,14 @@ public class ServerLinkHolder : BackgroundService, IServerLinkHolder
 
         if (result == null)
         {
+            session.Close();
             _logger.LogWaitForSigninResultFailed(endPoint);
             return null;
         }
 
         if (!result.Succeeded)
         {
+            session.Close();
             _logger.LogServerRefusedClientToLogin(endPoint);
             return result;
         }
@@ -100,20 +118,41 @@ public class ServerLinkHolder : BackgroundService, IServerLinkHolder
 
         ServerSession = session;
         IsConnected = true;
-
-        Hive.Common.Shared.Helpers.TaskHelper.FireAndForget(() => CheckServerLivenessAsync(cancellationToken));
+        LastDisconnectWasRequested = false;
+        _livenessCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _livenessTask = CheckServerLivenessAsync(session, _livenessCancellation.Token);
 
         return result;
     }
 
     public async Task DisconnectAsync(CancellationToken cancellationToken)
     {
-        if (!IsConnected || ServerSession == null) return;
+        await _connectionLock.WaitAsync(cancellationToken);
+        try { await DisconnectCoreAsync(true, cancellationToken); }
+        finally { _connectionLock.Release(); }
+    }
+
+    private async Task DisconnectCoreAsync(bool requested, CancellationToken cancellationToken)
+    {
+        var session = ServerSession;
+        if (session == null) return;
+        _requestedDisconnectSession = requested ? session : null;
 
         _logger.LogDisconnectingFromServer();
 
-        await _dispatcher.SendAsync(ServerSession, new ShutdownMessage(), CancellationToken.None);
-        ServerSession.Close();
+        try
+        {
+            if (requested) await _dispatcher.SendAsync(session, new ShutdownMessage(), cancellationToken);
+        }
+        finally
+        {
+            session.Close();
+            _livenessCancellation?.Cancel();
+            if (_livenessTask is { } monitor) await monitor;
+            _livenessCancellation?.Dispose();
+            _livenessCancellation = null;
+            _livenessTask = null;
+        }
 
         _logger.LogDisconnectedFromServer();
 
@@ -121,7 +160,7 @@ public class ServerLinkHolder : BackgroundService, IServerLinkHolder
         IsConnected = false;
     }
 
-    private async Task CheckServerLivenessAsync(CancellationToken cancellationToken)
+    private async Task CheckServerLivenessAsync(ISession session, CancellationToken cancellationToken)
     {
         var endPoint = new IPEndPoint(_settingProvider.ServerAddress, _settingProvider.ServerPort);
 
@@ -134,7 +173,7 @@ public class ServerLinkHolder : BackgroundService, IServerLinkHolder
 
             while (cancellationToken is { IsCancellationRequested: false } &&
                    IsConnected &&
-                   ServerSession != null)
+                   ReferenceEquals(ServerSession, session))
             {
                 await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
 
@@ -154,16 +193,21 @@ public class ServerLinkHolder : BackgroundService, IServerLinkHolder
         }
         finally
         {
-            OnServerLinkDisconnected?.Invoke();
-
-            IsConnected = false;
-            ServerSession?.Close();
-            ServerSession = null;
+            if (ReferenceEquals(ServerSession, session))
+            {
+                LastDisconnectWasRequested = ReferenceEquals(_requestedDisconnectSession, session);
+                IsConnected = false;
+                IsSignedIn = false;
+                session.Close();
+                ServerSession = null;
+                OnServerLinkDisconnected?.Invoke();
+            }
         }
     }
 
     private void OnHeartBeatReceived(MessageContext<HeartBeat> ctx)
     {
+        if (!ReferenceEquals(ctx.FromSession, ServerSession)) return;
         _lastHeartBeatTime = DateTime.UtcNow;
         _logger.LogHeartbeatReceivedFromServer();
     }
@@ -171,7 +215,18 @@ public class ServerLinkHolder : BackgroundService, IServerLinkHolder
     private void OnShutdownMessageReceived(MessageContext<ShutdownMessage> ctx)
     {
         _logger.LogShutdownMessageReceivedFromServer();
-        DisconnectAsync(CancellationToken.None).Forget();
+        if (!ReferenceEquals(ctx.FromSession, ServerSession)) return;
+        DisconnectFromServerAsync(ctx.FromSession).Forget();
+    }
+
+    private async Task DisconnectFromServerAsync(ISession session)
+    {
+        await _connectionLock.WaitAsync();
+        try
+        {
+            if (ReferenceEquals(session, ServerSession)) await DisconnectCoreAsync(false, CancellationToken.None);
+        }
+        finally { _connectionLock.Release(); }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
