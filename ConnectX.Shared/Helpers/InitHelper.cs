@@ -13,24 +13,27 @@ namespace ConnectX.Shared.Helpers;
 
 public static class InitHelper
 {
-    public static void AddConnectXEssentials(this IServiceCollection services)
+    extension(IServiceCollection services)
     {
-        MemoryPackFormatterProvider.Register(new IpEndPointFormatter());
-        MemoryPackFormatterProvider.Register(new IpAddressFormatter());
+        public void AddConnectXEssentials()
+        {
+            MemoryPackFormatterProvider.Register(new IpEndPointFormatter());
+            MemoryPackFormatterProvider.Register(new IpAddressFormatter());
 
-        services.RegisterConnectXSharedPackets();
+            services.RegisterConnectXSharedPackets();
 
-        services.AddSingleton<ICustomCodecProvider, DefaultCustomCodecProvider>();
-        services.AddSingleton<IPacketIdMapper, DefaultPacketIdMapper>();
-        services.AddSingleton<IPacketCodec, MemoryPackPacketCodec>();
-        services.AddSingleton<IDispatcher, DefaultDispatcher>();
+            services.AddSingleton<ICustomCodecProvider, DefaultCustomCodecProvider>();
+            services.AddSingleton<IPacketIdMapper, DefaultPacketIdMapper>();
+            services.AddSingleton<IPacketCodec, MemoryPackPacketCodec>();
+            services.AddSingleton<IDispatcher, DefaultDispatcher>();
 
-        // TCP
-        services.AddSingleton<IAcceptor<TcpSession>, TcpAcceptor>();
-        services.AddSingleton<IConnector<TcpSession>, TcpConnector>();
+            // TCP
+            services.AddSingleton<IAcceptor<TcpSession>, TcpAcceptor>();
+            services.AddSingleton<IConnector<TcpSession>, TcpConnector>();
 
-        // UDP
-        services.AddSingleton<IAcceptor<UdpSession>, UdpAcceptor>();
-        services.AddSingleton<IConnector<UdpSession>, UdpConnector>();
+            // UDP
+            services.AddSingleton<IAcceptor<UdpSession>, UdpAcceptor>();
+            services.AddSingleton<IConnector<UdpSession>, UdpConnector>();
+        }
     }
 }

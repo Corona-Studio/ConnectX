@@ -7,7 +7,7 @@ namespace ConnectX.Client.Models;
 public class SessionPlaceHolder : ISession
 {
     public static readonly SessionPlaceHolder Shared = new();
-    public bool StreamMode { get; set; } = false;
+    public bool StreamMode { get; set; }
     public long LastHeartBeatTime => throw new NotImplementedException();
 
     public SessionId Id => new();

@@ -9,7 +9,7 @@ public sealed class RoomOpsHistoryContext : DbContext
     {
     }
 
-    public DbSet<RoomCreateHistory> RoomCreateHistories { get; set; }
+    public DbSet<RoomCreateHistory> RoomCreateHistories { get; set; } = null!;
 
-    public DbSet<RoomJoinHistory> RoomJoinHistories { get; set; }
+    public DbSet<RoomJoinHistory> RoomJoinHistories { get; set; } = null!;
 }

@@ -19,10 +19,10 @@ public partial class RelayServerManager
     private readonly IDispatcher _dispatcher;
     private readonly ILogger _logger;
 
-    private readonly Dictionary<SessionId, Guid> _sessionIdMapping = new();
-    private readonly Dictionary<Guid, ISession> _sessionMapping = new();
-    private readonly Dictionary<Guid, IPEndPoint> _serverAddressMapping = new();
-    private readonly Dictionary<IPEndPoint, ISession> _relayAddressSessionMapping = new();
+    private readonly Dictionary<SessionId, Guid> _sessionIdMapping = [];
+    private readonly Dictionary<Guid, ISession> _sessionMapping = [];
+    private readonly Dictionary<Guid, IPEndPoint> _serverAddressMapping = [];
+    private readonly Dictionary<IPEndPoint, ISession> _relayAddressSessionMapping = [];
 
     private readonly ControlPlaneActor _actor;
 

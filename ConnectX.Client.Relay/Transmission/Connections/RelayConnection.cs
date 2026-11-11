@@ -380,8 +380,7 @@ public sealed class RelayConnection : ConnectionBase, IDatagramTransmit<RelayDat
             return;
         }
 
-        if (_relayServerDataLink != null)
-            _relayServerDataLink.OnMessageReceived -= Dispatcher.Dispatch;
+        _relayServerDataLink?.OnMessageReceived -= Dispatcher.Dispatch;
         _relayServerDataLink = null;
 
         if (count > 1)

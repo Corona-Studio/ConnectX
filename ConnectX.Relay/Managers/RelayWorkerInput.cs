@@ -12,7 +12,7 @@ namespace ConnectX.Relay.Managers;
 /// </summary>
 internal sealed class RelayWorkerInput(ControlPlaneActor actor, ISession source, TimeProvider clock)
 {
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     internal const int MaxBufferedBytes = 1024 * 1024;
     private readonly Queue<byte[]> _pending = new();
     private int _pendingBytes;

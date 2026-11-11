@@ -9,8 +9,8 @@ namespace ConnectX.Actors;
 internal sealed class SessionTransportHub(CancellationToken lifetime, ILogger logger)
 {
     private readonly Lock _gate = new();
-    private readonly Dictionary<ISession, SessionOutbox> _outboxes = new(ReferenceEqualityComparer.Instance);
-    private readonly ConditionalWeakTable<ISession, object> _closed = new();
+    private readonly Dictionary<ISession, SessionOutbox> _outboxes = [with(ReferenceEqualityComparer.Instance)];
+    private readonly ConditionalWeakTable<ISession, object> _closed = [];
     private readonly HashSet<Task> _retired = [];
     private bool _stopping;
 
@@ -96,7 +96,7 @@ internal sealed class SessionTransportHub(CancellationToken lifetime, ILogger lo
         {
             _stopping = true;
             foreach (var outbox in _outboxes.Values) outbox.Complete();
-            pending = _outboxes.Values.Select(x => x.Completion).Concat(_retired).ToArray();
+            pending = [.. _outboxes.Values.Select(x => x.Completion), .. _retired];
             _outboxes.Clear();
             _retired.Clear();
         }

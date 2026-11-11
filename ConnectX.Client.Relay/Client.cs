@@ -111,7 +111,7 @@ public class Client
         {
             case GroupUserStates.Joined:
                 if (_isInGroup && _roomInfoManager.CurrentGroupInfo?.RoomId != null)
-                    _roomInfoManager.AcquireGroupInfoAsync(_roomInfoManager.CurrentGroupInfo!.RoomId).Forget();
+                    _roomInfoManager.AcquireGroupInfoAsync(_roomInfoManager.CurrentGroupInfo.RoomId).Forget();
                 break;
             case GroupUserStates.Left:
             case GroupUserStates.Disconnected:
@@ -119,7 +119,7 @@ public class Client
                 if (userInfo?.UserId == _serverLinkHolder.UserId)
                     ResetRoomState().Forget();
                 else if (_isInGroup && _roomInfoManager.CurrentGroupInfo?.RoomId != null)
-                    _roomInfoManager.AcquireGroupInfoAsync(_roomInfoManager.CurrentGroupInfo!.RoomId).Forget();
+                    _roomInfoManager.AcquireGroupInfoAsync(_roomInfoManager.CurrentGroupInfo.RoomId).Forget();
                 break;
             case GroupUserStates.Dismissed:
                 ResetRoomState().Forget();

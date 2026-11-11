@@ -1,5 +1,4 @@
-﻿using System.Net.Http.Json;
-using ConnectX.Server.Interfaces;
+﻿using ConnectX.Server.Interfaces;
 using ConnectX.Server.Models.ZeroTier;
 
 namespace ConnectX.Server.Services;

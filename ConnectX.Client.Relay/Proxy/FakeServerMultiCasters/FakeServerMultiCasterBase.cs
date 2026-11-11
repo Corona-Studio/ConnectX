@@ -12,7 +12,7 @@ using Microsoft.Extensions.Logging;
 
 namespace ConnectX.Client.Proxy.FakeServerMultiCasters;
 
-public abstract class FakeServerMultiCasterBase<TMultiCastPacket> : BackgroundService
+public closed class FakeServerMultiCasterBase<TMultiCastPacket> : BackgroundService
 {
     protected const string Prefix = "ConnectX";
 

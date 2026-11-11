@@ -9,7 +9,7 @@ namespace ConnectX.Actors;
 /// </summary>
 internal sealed class ActorSynchronizationContext(string name) : SynchronizationContext
 {
-    private readonly BlockingCollection<(SendOrPostCallback Callback, object? State)> _continuations = new();
+    private readonly BlockingCollection<(SendOrPostCallback Callback, object? State)> _continuations = [];
     private int _started;
     private int _threadId;
     public bool IsCurrent => Environment.CurrentManagedThreadId == _threadId && Current == this;

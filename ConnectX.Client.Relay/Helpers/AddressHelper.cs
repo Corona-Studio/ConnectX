@@ -5,13 +5,16 @@ namespace ConnectX.Client.Helpers;
 
 public static class AddressHelper
 {
-    public static IPAddress? GetFirstAvailableV4(this IEnumerable<IPAddress> addresses)
+    extension(IEnumerable<IPAddress> addresses)
     {
-        return addresses.FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork);
-    }
+        public IPAddress? GetFirstAvailableV4()
+        {
+            return addresses.FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork);
+        }
 
-    public static IPAddress? GetFirstAvailableV6(this IEnumerable<IPAddress> addresses)
-    {
-        return addresses.FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetworkV6);
+        public IPAddress? GetFirstAvailableV6()
+        {
+            return addresses.FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetworkV6);
+        }
     }
 }

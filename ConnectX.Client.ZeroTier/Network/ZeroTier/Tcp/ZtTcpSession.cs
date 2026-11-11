@@ -57,7 +57,7 @@ public sealed class ZtTcpSession : AbstractSession, IWritableFrameSession
         ArgumentNullException.ThrowIfNull(Socket);
 
         token.ThrowIfCancellationRequested();
-        var len = Socket.Send(data.Array!, data.Offset, data.Count, SocketFlags.None);
+        var len = Socket.Send(data.Array, data.Offset, data.Count, SocketFlags.None);
 
         if (len == 0)
             OnSocketError?.Invoke(this, SocketError.ConnectionReset);
@@ -106,7 +106,7 @@ public sealed class ZtTcpSession : AbstractSession, IWritableFrameSession
         ArgumentNullException.ThrowIfNull(Socket);
 
         token.ThrowIfCancellationRequested();
-        var len = Socket.Receive(buffer.Array!, buffer.Offset, buffer.Count, SocketFlags.None);
+        var len = Socket.Receive(buffer.Array, buffer.Offset, buffer.Count, SocketFlags.None);
 
         return ValueTask.FromResult(len);
     }

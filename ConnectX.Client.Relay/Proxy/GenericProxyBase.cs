@@ -1,5 +1,4 @@
-﻿using System.Buffers;
-using System.Net.Sockets;
+﻿using System.Net.Sockets;
 using System.Threading.Channels;
 using ConnectX.Client.Messages.Proxy;
 using Hive.Common.Shared.Helpers;
@@ -31,15 +30,14 @@ public abstract class GenericProxyBase : IDisposable
 
     public void RemoveOutwardAsyncSender(Func<ForwardPacketCarrier, ValueTask<bool>> sender)
     {
-        lock (this) _outwardAsyncSenders = _outwardAsyncSenders.Where(x => x != sender).ToArray();
+        lock (this) _outwardAsyncSenders = [.. _outwardAsyncSenders.Where(x => x != sender)];
     }
     public readonly TunnelIdentifier TunnelIdentifier;
 
     private bool _disposed;
     private int _started;
     private Socket? _innerSocket;
-    private object? _proxyInfoForLog;
-    private object ProxyInfoForLog => _proxyInfoForLog ??= GetProxyInfoForLog();
+    private object ProxyInfoForLog => field ??= GetProxyInfoForLog();
 
     protected Channel<ForwardPacketCarrier>? InwardBuffersQueue;
     protected Channel<ForwardPacketCarrier>? OutwardBuffersQueue;
@@ -119,7 +117,7 @@ public abstract class GenericProxyBase : IDisposable
 
     public virtual void Start()
     {
-        if (_disposed) throw new ObjectDisposedException(nameof(GenericProxyBase));
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (Interlocked.Exchange(ref _started, 1) != 0) return;
         Logger.LogStartingProxy(ProxyInfoForLog);
 

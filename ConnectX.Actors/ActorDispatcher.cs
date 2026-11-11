@@ -27,7 +27,7 @@ public sealed class ActorDispatcher(IPacketCodec codec, ILogger<ActorDispatcher>
     private readonly ConcurrentDictionary<Type, ConcurrentDictionary<HandlerId, IHandler>> _types = new();
     private readonly ConcurrentDictionary<HandlerId, Type> _ids = new();
     private readonly ConcurrentDictionary<Delegate, HandlerId> _delegates = new();
-    private readonly ConditionalWeakTable<ISession, SemaphoreSlim> _requestGates = new();
+    private readonly ConditionalWeakTable<ISession, SemaphoreSlim> _requestGates = [];
     private int _nextId;
 
     public HandlerId AddHandler<T>(Action<MessageContext<T>> handler, TaskScheduler? scheduler = null)

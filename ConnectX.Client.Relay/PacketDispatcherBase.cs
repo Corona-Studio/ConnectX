@@ -111,13 +111,11 @@ public abstract class PacketDispatcherBase<TInPacket>
 
         var context = new PacketContext(from);
 
-        if (tempCallback != null)
-            tempCallback.Invoke(message, context);
+        tempCallback?.Invoke(message, context);
 
         // 调用同步回调
 
-        if (specificCallback != null)
-            specificCallback.Invoke(message, context);
+        specificCallback?.Invoke(message, context);
 
         foreach (var callback in uniformCallbacks) callback.Invoke(message, context);
     }

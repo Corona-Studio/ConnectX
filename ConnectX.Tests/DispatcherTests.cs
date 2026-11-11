@@ -59,7 +59,7 @@ public sealed class DispatcherTests
         for (var i = 0; i < 100 && fast.Sent.Count < 2; i++) await Task.Delay(10);
         Assert.That(fast.Sent.Count, Is.EqualTo(2));
         var messages = codec.Encoded.OfType<string>().Where(x => x != "blocked").ToArray();
-        Assert.That(messages, Is.EqualTo(new[] { "first", "second" }));
+        Assert.That(messages, Is.EqualTo((string[])["first", "second"]));
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await actor.StopAsync(timeout.Token);
         Assert.That(blocked.Closed, Is.True);
@@ -77,7 +77,7 @@ public sealed class DispatcherTests
         Assert.That(admission.TryPromote(replacement), Is.False);
         admission.Accept(original);
         clock.Advance(TimeSpan.FromMinutes(11));
-        Assert.That(admission.RemoveExpired(TimeSpan.FromMinutes(10)), Is.EqualTo(new[] { original }));
+        Assert.That(admission.RemoveExpired(TimeSpan.FromMinutes(10)), Is.EqualTo((TestSession[])[original]));
     }
 
     private sealed class TestClock : TimeProvider

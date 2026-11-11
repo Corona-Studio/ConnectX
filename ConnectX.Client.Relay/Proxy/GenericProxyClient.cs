@@ -19,7 +19,6 @@ public sealed class GenericProxyClient : GenericProxyBase
     }
 
     private ushort LocalServerPort => TunnelIdentifier.LocalRealPort;
-    private ushort RemoteClientPort => TunnelIdentifier.RemoteRealPort;
 
     protected override object GetProxyInfoForLog()
     {

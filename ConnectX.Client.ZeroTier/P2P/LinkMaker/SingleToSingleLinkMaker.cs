@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 
 namespace ConnectX.Client.P2P.LinkMaker;
 
-public abstract class SingleToSingleLinkMaker(
+public closed class SingleToSingleLinkMaker(
     IServiceProvider serviceProvider,
     ILogger<SingleToSingleLinkMaker> logger,
     long startTimeTick,

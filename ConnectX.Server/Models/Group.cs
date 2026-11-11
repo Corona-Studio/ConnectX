@@ -35,7 +35,7 @@ public class Group(
             RoomOwnerId = group.RoomOwner.UserId,
             RoomShortId = group.RoomShortId,
             RoomNetworkId = group.NetworkId,
-            Users = group.Users.Select(x => (UserInfo)x).ToArray(),
+            Users = [.. group.Users.Select(x => (UserInfo)x)],
             UseRelayServer = group.AssignedRelayServer != null
         };
     }

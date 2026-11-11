@@ -18,7 +18,6 @@ public class P2PConInitiator : IDisposable
 {
     private readonly CancellationTokenSource _cancellationTokenSource;
     private readonly int _bargain;
-    private readonly IPEndPoint _localEndPoint;
     private readonly ILogger<P2PConInitiator> _logger;
 
     // ReSharper disable once InconsistentNaming
@@ -46,7 +45,6 @@ public class P2PConInitiator : IDisposable
         _serviceProvider = serviceProvider;
         _partnerId = partnerId;
         _serverLink = serverLink;
-        _localEndPoint = localEndPoint;
         _selfContext = selfContext;
         _bargain = selfContext switch
         {

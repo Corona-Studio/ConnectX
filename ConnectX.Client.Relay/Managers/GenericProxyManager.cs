@@ -15,7 +15,7 @@ using TaskHelper = Hive.Common.Shared.Helpers.TaskHelper;
 
 namespace ConnectX.Client.Managers;
 
-public abstract class GenericProxyManager : BackgroundService
+public closed class GenericProxyManager : BackgroundService
 {
     private readonly ConcurrentDictionary<TunnelIdentifier, Socket> _acceptedSockets = [];
     private readonly ConcurrentDictionary<ValueTuple<Guid, ushort>, GenericProxyAcceptor> _acceptors = [];

@@ -15,13 +15,13 @@ public partial class P2PManager : BackgroundService
 
     private readonly ClientManager _clientManager;
     private readonly Dictionary<(int Bargain, Guid RequesterId, Guid TargetId),
-        (ISession Session, P2PConRequest Request, long CreatedAt)> _conRequests = new();
+        (ISession Session, P2PConRequest Request, long CreatedAt)> _conRequests = [];
     private readonly IDispatcher _dispatcher;
     private readonly TimeProvider _clock;
     private readonly ILogger _logger;
 
-    private readonly Dictionary<SessionId, Guid> _sessionIdMapping = new();
-    private readonly Dictionary<Guid, ISession> _userSessionMappings = new();
+    private readonly Dictionary<SessionId, Guid> _sessionIdMapping = [];
+    private readonly Dictionary<Guid, ISession> _userSessionMappings = [];
 
     private readonly ControlPlaneActor _actor;
 

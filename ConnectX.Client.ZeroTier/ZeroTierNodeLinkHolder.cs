@@ -21,7 +21,7 @@ public class ZeroTierNodeLinkHolder(ILogger<ZeroTierNodeLinkHolder> logger) : Ba
     {
         ArgumentNullException.ThrowIfNull(Node);
 
-        return Node.GetNetworkAddresses(_networkId!.Value).ToArray();
+        return [.. Node.GetNetworkAddresses(_networkId!.Value)];
     }
 
     public IPAddress? GetFirstAvailableV4Address()
@@ -171,7 +171,7 @@ public class ZeroTierNodeLinkHolder(ILogger<ZeroTierNodeLinkHolder> logger) : Ba
                 continue;
             }
 
-            var routes = Node!.GetNetworkRoutes(_networkId.Value);
+            var routes = Node.GetNetworkRoutes(_networkId.Value);
 
             if (routes == null || routes.Count == 0)
             {

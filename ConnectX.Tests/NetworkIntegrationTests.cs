@@ -5,7 +5,6 @@ using ConnectX.Actors;
 using ConnectX.Client.Transmission.Connections;
 using ConnectX.Relay;
 using ConnectX.Relay.Interfaces;
-using ConnectX.Relay.Services;
 using ConnectX.Server;
 using ConnectX.Server.Interfaces;
 using ConnectX.Server.Managers;

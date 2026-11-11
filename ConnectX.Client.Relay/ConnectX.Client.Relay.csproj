@@ -12,7 +12,6 @@
     <InternalsVisibleTo Include="ConnectX.Tests" />
     <PackageReference Include="CommunityToolkit.HighPerformance" />
     <PackageReference Condition="'$(Configuration)' == 'Debug'" Include="ConsoleTables" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="Snappier" />
   </ItemGroup>
 

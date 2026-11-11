@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace ConnectX.Client.P2P.LinkMaker;
 
-public abstract class P2PLinkMaker(
+public closed class P2PLinkMaker(
     long startTimeTick,
     Guid partnerId,
     IServiceProvider serviceProvider,

@@ -40,7 +40,7 @@ internal static partial class InterconnectServerSettingProviderLoggers
         this ILogger logger,
         string address);
 
-    [LoggerMessage(LogLevel.Error, "Can not parse the InterconnectServer:ListenAddress to IPAddress")]
+    [LoggerMessage(LogLevel.Error, "Can not parse the InterconnectServer:ListenAddress [{address}] to IPAddress")]
     public static partial void LogCanNotParseInterconnectServerIpAddress(
         this ILogger logger,
         string address);

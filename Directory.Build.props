@@ -8,6 +8,8 @@
   </PropertyGroup>
   
   <PropertyGroup>
+    <LangVersion>15.0</LangVersion>
+    <WarningsAsErrors>$(WarningsAsErrors);CS8509;CS8655</WarningsAsErrors>
     <FileVersion>$(AssemblyVersion)</FileVersion>
     <Version>$(AssemblyVersion)</Version>
   </PropertyGroup>

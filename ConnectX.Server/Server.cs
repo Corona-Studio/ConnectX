@@ -4,12 +4,10 @@ using ConnectX.Server.Interfaces;
 using ConnectX.Server.Managers;
 using ConnectX.Server.Messages;
 using ConnectX.Shared;
-using ConnectX.Shared.Messages;
 using ConnectX.Shared.Messages.Identity;
 using ConnectX.Shared.Messages.Server;
 using Hive.Both.General.Dispatchers;
 using Hive.Network.Abstractions;
-using Hive.Network.Abstractions.Session;
 using Microsoft.Extensions.Logging;
 
 namespace ConnectX.Server;

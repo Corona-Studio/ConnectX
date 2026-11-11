@@ -14,7 +14,6 @@ public partial class RelayLoadManager
     private readonly ClientManager _clientManager;
     private readonly RelayServerManager _relayServers;
 
-    private readonly IDispatcher _dispatcher;
     private readonly ILogger _logger;
 
     private readonly Dictionary<SessionId, double> _relayAvailabilityMapping = [];
@@ -29,7 +28,6 @@ public partial class RelayLoadManager
         ILogger<RelayLoadManager> logger)
     {
         _actor = actor;
-        _dispatcher = dispatcher;
         _logger = logger;
         _clientManager = clientManager;
         _relayServers = relayServers;

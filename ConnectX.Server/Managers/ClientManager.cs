@@ -15,7 +15,6 @@ public delegate void SessionDisconnectedHandler(SessionId sessionId);
 public partial class ClientManager : BackgroundService
 {
     private readonly ControlPlaneActor _actor;
-    private readonly IDispatcher _dispatcher;
     private readonly ILogger _logger;
     private readonly TimeProvider _timeProvider;
     private readonly IServiceScopeFactory _serviceScopeFactory;
@@ -26,7 +25,6 @@ public partial class ClientManager : BackgroundService
     {
         _actor = actor;
         _timeProvider = timeProvider;
-        _dispatcher = dispatcher;
         _logger = logger;
         _serviceScopeFactory = serviceScopeFactory;
         RegisterActorHandlers(dispatcher, actor);

@@ -36,10 +36,10 @@ public partial class GroupManager
     private readonly ILogger _logger;
 
     private readonly Dictionary<Guid, Guid> _pendingRoomOperations = [];
-    private readonly Dictionary<Guid, Group> _groupMappings = new();
-    private readonly Dictionary<SessionId, Guid> _sessionIdMapping = new();
-    private readonly Dictionary<string, Guid> _shortIdGroupMappings = new();
-    private readonly Dictionary<Guid, BasicUserInfo> _userMapping = new();
+    private readonly Dictionary<Guid, Group> _groupMappings = [];
+    private readonly Dictionary<SessionId, Guid> _sessionIdMapping = [];
+    private readonly Dictionary<string, Guid> _shortIdGroupMappings = [];
+    private readonly Dictionary<Guid, BasicUserInfo> _userMapping = [];
 
     private readonly ControlPlaneActor _actor;
 

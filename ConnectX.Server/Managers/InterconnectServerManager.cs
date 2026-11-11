@@ -17,7 +17,7 @@ public partial class InterconnectServerManager
     partial void DisposeActorResources() { _clientManager.OnSessionDisconnected -= OnClientSessionDisconnected; }
 
     private readonly Dictionary<SessionId, InterconnectServerRegistration> _registerServerInfo = [];
-    private readonly Dictionary<SessionId, ISession> _sessionMapping = new();
+    private readonly Dictionary<SessionId, ISession> _sessionMapping = [];
 
     private readonly ClientManager _clientManager;
     private readonly IInterconnectServerSettingProvider _interconnectServerSettingProvider;
@@ -102,7 +102,7 @@ public partial class InterconnectServerManager
     public (ISession Session, InterconnectServerRegistration Registration)[] GetRegisteredServers()
     {
         _actor.AssertAccess();
-        return _sessionMapping.Select(x => (x.Value, _registerServerInfo[x.Key])).ToArray();
+        return [.. _sessionMapping.Select(x => (x.Value, _registerServerInfo[x.Key]))];
     }
 
     public async Task<InterconnectServerRegistration?> FindRemoteRoomAsync(JoinGroup joinGroup,

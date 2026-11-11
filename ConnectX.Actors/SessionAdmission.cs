@@ -26,7 +26,7 @@ public sealed class SessionAdmission(TimeProvider timeProvider)
         var now = timeProvider.GetTimestamp();
         var expired = _pending.Where(x => timeProvider.GetElapsedTime(x.Value.AcceptedAt, now) >= timeout || !SessionHealth.IsConnected(x.Value.Session)).ToArray();
         foreach (var item in expired) _pending.Remove(item.Key);
-        return expired.Select(x => x.Value.Session).ToArray();
+        return [.. expired.Select(x => x.Value.Session)];
     }
 
     public ISession[] Drain()

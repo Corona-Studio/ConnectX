@@ -79,9 +79,9 @@ public partial class ServerLinkHolder : BackgroundService, IServerLinkHolder
                 ?? throw new IOException("Relay public address is unavailable.");
             var port = _settingProvider.PublicListenPort != 0
                 ? _settingProvider.PublicListenPort : _settingProvider.RelayServerPort;
-            var registration = await _dispatcher.SendAndListenOnce<RegisterRelayServerMessage, RelayServerRegisteredMessage>(
-                session, new RegisterRelayServerMessage(_settingProvider.ServerId, new IPEndPoint(address, port)), timeout.Token);
-            if (registration == null) throw new IOException("Main server did not register the relay.");
+            _ = await _dispatcher.SendAndListenOnce<RegisterRelayServerMessage, RelayServerRegisteredMessage>(
+                session, new RegisterRelayServerMessage(_settingProvider.ServerId, new IPEndPoint(address, port)), timeout.Token)
+                ?? throw new IOException("Main server did not register the relay.");
             await _actor.InvokeAsync(() =>
             {
                 if (!ReferenceEquals(ServerSession, session)) throw new IOException("Relay connection was superseded.");

@@ -9,7 +9,6 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks.Sources;
 using Hive.Common.Shared.Pooling;
 using Hive.Both.General.Dispatchers;
-using Hive.Codec.Abstractions;
 using Hive.Codec.MemoryPack;
 using Hive.Codec.Shared;
 using Hive.Network.Shared;
@@ -89,7 +88,7 @@ public static class RegressionSuite
         var receive = session.Receive();
         // First frame is 7 bytes; with 8-byte pool segments, the next length
         // straddles a segment. Both packets are in the same pipe read.
-        await session.Feed(Frame([42]).Concat(Frame([1, 2, 3, 4, 5, 6, 7, 8])).ToArray());
+        await session.Feed([.. Frame([42]), .. Frame([1, 2, 3, 4, 5, 6, 7, 8])]);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Check(count == 1, "Receive loop advanced while consumer was suspended.");
         resume.SetResult();
@@ -184,7 +183,7 @@ public static class RegressionSuite
         var id = mapper.GetPacketId(typeof(Ping));
         Parallel.Invoke(
             () => Parallel.For(0, 10000, _ => Check(mapper.GetPacketId(typeof(Ping)).Equals(id) && mapper.GetPacketType(id) == typeof(Ping), "Mapping snapshot was inconsistent.")),
-            () => mapper.Register<ForwardPacketCarrier>());
+            mapper.Register<ForwardPacketCarrier>);
         Check(mapper.GetPacketType(mapper.GetPacketId(typeof(ForwardPacketCarrier))) == typeof(ForwardPacketCarrier), "New type was not published.");
         try { mapper.Register<Ping>(); throw new Exception("Duplicate packet registration accepted."); }
         catch (System.Data.DuplicateNameException) { }
@@ -332,7 +331,7 @@ public static class RegressionSuite
         {
             using var decoded = PooledBufferStream.Rent();
             SnappyBlockDecoder.Decode(new ReadOnlySequence<byte>(valid), decoded);
-            Check(decoded.Memory.Span.SequenceEqual(new byte[] { 65, 65, 65, 65, 65 }), "Backreference tag failed.");
+            Check(decoded.Memory.Span.SequenceEqual("AAAAA"u8), "Backreference tag failed.");
             Check(Snappy.DecompressToArray(valid).AsSpan().SequenceEqual(decoded.Memory.Span), "Explicit tag differs from Snappier.");
         }
         foreach (var invalid in new byte[][]

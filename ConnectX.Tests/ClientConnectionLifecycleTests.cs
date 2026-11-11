@@ -1,22 +1,11 @@
-using System.Buffers;
-
 using System.Net;
 using ConnectX.Actors;
-using ConnectX.Client.Transmission.Connections;
-using ConnectX.Relay;
-using ConnectX.Relay.Interfaces;
-using ConnectX.Relay.Services;
 using ConnectX.Server;
 using ConnectX.Server.Interfaces;
 using ConnectX.Server.Managers;
 using ConnectX.Server.Services;
-using ConnectX.Shared;
 using ConnectX.Shared.Helpers;
 using ConnectX.Shared.Messages;
-using ConnectX.Shared.Messages.Group;
-using ConnectX.Shared.Messages.Identity;
-using ConnectX.Shared.Messages.Relay;
-using ConnectX.Shared.Messages.Relay.Datagram;
 using Hive.Both.General.Dispatchers;
 using Hive.Network.Abstractions.Session;
 using Hive.Network.Tcp;
@@ -26,7 +15,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using ServerClientManager = ConnectX.Server.Managers.ClientManager;
-using RelayClientManager = ConnectX.Relay.Managers.ClientManager;
 
 namespace ConnectX.Tests;
 
@@ -77,7 +65,7 @@ public sealed class ClientConnectionLifecycleTests
             Assert.That((await holder.ConnectAsync(lifetime.Token))?.Succeeded, Is.True);
             var oldSession = holder.ServerSession;
             await holder.DisconnectAsync(lifetime.Token);
-            Assert.That(disconnects.ToArray(), Is.EqualTo(new[] { true }));
+            Assert.That(disconnects.ToArray(), Is.EqualTo((bool[])[true]));
             Assert.That(holder.ServerSession, Is.Null);
             Assert.That((await holder.ConnectAsync(lifetime.Token))?.Succeeded, Is.True);
             var newSession = holder.ServerSession;
@@ -91,13 +79,13 @@ public sealed class ClientConnectionLifecycleTests
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
             shutdown.Invoke(holder, [new MessageContext<ShutdownMessage>(newSession!, holderDispatcher, new())]);
             await TaskHelper.WaitUntilAsync(() => disconnects.Count == 2, lifetime.Token);
-            Assert.That(disconnects.ToArray(), Is.EqualTo(new[] { true, false }), "Remote shutdown must remain distinguishable from a requested disconnect.");
+            Assert.That(disconnects.ToArray(), Is.EqualTo((bool[])[true, false]), "Remote shutdown must remain distinguishable from a requested disconnect.");
         }
         await serverHost.StopAsync();
     }
     private static void AddTransport(IServiceCollection services)
     {
-        services.AddConnectXEssentials(); services.AddSingleton<IDispatcher, ActorDispatcher>();
+        InitHelper.AddConnectXEssentials(services); services.AddSingleton<IDispatcher, ActorDispatcher>();
         services.AddSingleton(TimeProvider.System); services.AddSingleton<ControlPlaneActor>();
         services.AddHostedService(sp => sp.GetRequiredService<ControlPlaneActor>());
     }

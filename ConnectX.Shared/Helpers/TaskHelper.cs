@@ -2,31 +2,44 @@ namespace ConnectX.Shared.Helpers;
 
 public static class TaskHelper
 {
-    public static void Forget(this Task task) => new ValueTask(task).Forget();
-    public static void Forget<T>(this Task<T> task) => new ValueTask<T>(task).Forget();
-
-    // Pooled ValueTask sources must be consumed exactly once, even for callers
-    // intentionally discarding the result. Reuse the observer and its delegate.
-    public static void Forget(this ValueTask task)
+    extension(Task task)
     {
-        if (task.IsCompleted)
-        {
-            try { task.GetAwaiter().GetResult(); }
-            catch (Exception e) { System.Diagnostics.Trace.TraceError(e.ToString()); }
-            return;
-        }
-        ForgetObserver.Rent(task);
+        public void Forget() => new ValueTask(task).Forget();
     }
 
-    public static void Forget<T>(this ValueTask<T> task)
+    extension<T>(Task<T> task)
     {
-        if (task.IsCompleted)
+        public void Forget() => new ValueTask<T>(task).Forget();
+    }
+
+    extension(ValueTask task)
+    {
+        // Pooled ValueTask sources must be consumed exactly once, even for callers
+        // intentionally discarding the result. Reuse the observer and its delegate.
+        public void Forget()
         {
-            try { task.GetAwaiter().GetResult(); }
-            catch (Exception e) { System.Diagnostics.Trace.TraceError(e.ToString()); }
-            return;
+            if (task.IsCompleted)
+            {
+                try { task.GetAwaiter().GetResult(); }
+                catch (Exception e) { System.Diagnostics.Trace.TraceError(e.ToString()); }
+                return;
+            }
+            ForgetObserver.Rent(task);
         }
-        ForgetObserver<T>.Rent(task);
+    }
+
+    extension<T>(ValueTask<T> task)
+    {
+        public void Forget()
+        {
+            if (task.IsCompleted)
+            {
+                try { task.GetAwaiter().GetResult(); }
+                catch (Exception e) { System.Diagnostics.Trace.TraceError(e.ToString()); }
+                return;
+            }
+            ForgetObserver<T>.Rent(task);
+        }
     }
 
     private sealed class ForgetObserver

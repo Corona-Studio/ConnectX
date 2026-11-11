@@ -33,14 +33,13 @@ public sealed class InterconnectServerLinkHolder(ControlPlaneActor actor, IDispa
                     ?? throw new IOException("Remote server unavailable.");
                 session.BindTo(dispatcher);
                 await actor.InvokeAsync(() => actor.ObserveSession(session), handshake.Token);
-                var result = await dispatcher.SendAndListenOnce<InterconnectServerRegistration, InterconnectServerRegistrationSucceeded>(
+                _ = await dispatcher.SendAndListenOnce<InterconnectServerRegistration, InterconnectServerRegistrationSucceeded>(
                     session, new InterconnectServerRegistration
                     {
                         ServerName = serverSettingProvider.ServerName,
                         ServerMotd = serverSettingProvider.ServerMotd,
                         ServerAddress = serverSettingProvider.ServerPublicEndPoint
-                    }, handshake.Token);
-                if (result == null) throw new IOException("Interconnect registration failed.");
+                    }, handshake.Token) ?? throw new IOException("Interconnect registration failed.");
                 using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
                 while (SessionHealth.IsConnected(session) && await timer.WaitForNextTickAsync(stoppingToken))
                     await actor.InvokeAsync(() => actor.Send(dispatcher, session, new HeartBeat()), stoppingToken);

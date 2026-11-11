@@ -24,7 +24,7 @@ public sealed class RelayWorkerReceiverTests
             Assert.That(received, Has.Count.EqualTo(2));
         };
         await receiver.EstablishAsync(new() { UserId = Guid.NewGuid(), RelayTo = Guid.NewGuid(), RoomId = Guid.NewGuid() }, CancellationToken.None);
-        Assert.That(received, Is.EqualTo(new[] { new byte[] { 2, 3 }, new byte[] { 4, 5 } }));
+        Assert.That(received, Is.EqualTo((byte[][])[[2, 3], [4, 5]]));
         Assert.That(codec.DecodeCount, Is.EqualTo(1), "Stream frames must bypass packet decoding.");
         receiver.Dispose();
         session.Receive([6]);

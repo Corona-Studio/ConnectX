@@ -15,7 +15,7 @@ public static class SnappyBlockDecoder
         var reader = new SequenceReader<byte>(input);
         var length = ReadLength(ref reader);
         // The writer checks its limit before renting any storage.
-        var destination = length == 0 ? Span<byte>.Empty : output.GetSpan(length)[..length];
+        var destination = length == 0 ? [] : output.GetSpan(length)[..length];
         var written = 0;
         uint previousOffset = 0;
         var previousCopyLength = 0;

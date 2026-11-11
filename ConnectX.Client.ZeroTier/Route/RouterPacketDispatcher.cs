@@ -1,7 +1,6 @@
 using System.Buffers;
 using ConnectX.Client.Models;
 using ConnectX.Client.Route.Packet;
-using ConnectX.Shared.Helpers;
 using Hive.Codec.Abstractions;
 using Hive.Network.Shared;
 using Hive.Common.Shared.Pooling;

@@ -54,8 +54,8 @@ public sealed class RelayTests
         });
         workerA.Receive([42]);
         for (var i = 0; i < 100 && workerB.Sent.Count < 2; i++) await Task.Delay(10);
-        Assert.That(workerB.Sent.ToArray(), Is.EqualTo(new[] { new byte[] { 41 }, new byte[] { 42 } }));
-        dispatcher.Dispatch(rogue, typeof(RelayDatagram), new RelayDatagram(a, b, new byte[] { 9 }));
+        Assert.That(workerB.Sent.ToArray(), Is.EqualTo((byte[][])[[41], [42]]));
+        dispatcher.Dispatch(rogue, typeof(RelayDatagram), new RelayDatagram(a, b, (byte[])[9]));
         await actor.InvokeAsync(() => { });
         Assert.That(codec.Encoded.OfType<UnwrappedRelayDatagram>(), Is.Empty);
         var replacement = new TestSession(6);
@@ -67,7 +67,7 @@ public sealed class RelayTests
             Assert.That(relay.GetRelayServerLoad().CurrentConnectionCount, Is.Zero);
         });
         Assert.That(dataA.Closed && workerA.Closed && workerB.Closed, Is.True);
-        dispatcher.Dispatch(replacement, typeof(RelayDatagram), new RelayDatagram(a, b, new byte[] { 10 }));
+        dispatcher.Dispatch(replacement, typeof(RelayDatagram), new RelayDatagram(a, b, (byte[])[10]));
         await actor.InvokeAsync(() => { });
         for (var i = 0; i < 100 && !codec.Encoded.OfType<UnwrappedRelayDatagram>().Any(); i++) await Task.Delay(10);
         Assert.That(codec.Encoded.OfType<UnwrappedRelayDatagram>().Count(), Is.EqualTo(1));
